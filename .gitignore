@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.angular/
+coverage/
+backend/prisma/*.db
+backend/prisma/*.db-journal
+*.log
+backend/.env
+

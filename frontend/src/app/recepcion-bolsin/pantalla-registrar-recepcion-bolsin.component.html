@@ -1,0 +1,88 @@
+<main class="page-shell">
+  <header class="hero">
+    <p class="eyebrow">Diseño de Sistemas de Información</p>
+    <h1>Registrar recepción de bolsín</h1>
+    <p>Flujo normal · Orden 28</p>
+  </header>
+
+  <p class="notice" *ngIf="cargando">Procesando información…</p>
+  <p class="notice error" *ngIf="error">{{ error }}</p>
+
+  <section class="card" *ngIf="comisionMedica">
+    <span class="step">1</span>
+    <div>
+      <h2>Comisión médica del usuario</h2>
+      <p class="highlight">{{ comisionMedica.nombre }}</p>
+    </div>
+  </section>
+
+  <section class="card block" *ngIf="bolsines.length">
+    <div class="section-title">
+      <span class="step">2</span>
+      <div>
+        <h2>Seleccionar bolsín enviado</h2>
+        <p>Se muestran únicamente los destinados a la comisión del usuario.</p>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Número</th><th>Precinto</th><th>Origen</th><th>Peso</th><th></th></tr></thead>
+        <tbody>
+          <tr *ngFor="let bolsin of bolsines" [class.selected]="bolsinSeleccionado?.id === bolsin.id">
+            <td>{{ bolsin.numeroBolsin }}</td>
+            <td>{{ bolsin.numeroPrecinto }}</td>
+            <td>{{ bolsin.comisionMedicaOrigen.nombre }}</td>
+            <td>{{ bolsin.peso }} kg</td>
+            <td><button type="button" class="secondary" (click)="tomarBolsin(bolsin)">Seleccionar</button></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="card block" *ngIf="detalleBolsin">
+    <div class="section-title">
+      <span class="step">3</span>
+      <div>
+        <h2>Documentación registrada</h2>
+        <p>Bolsín {{ detalleBolsin.numeroBolsin }} · Precinto {{ detalleBolsin.numeroPrecinto }}</p>
+      </div>
+    </div>
+    <div class="remito" *ngFor="let remito of detalleBolsin.remitos">
+      <h3>Remito {{ remito.numero }}</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Número</th><th>Tipo</th><th>Asunto</th></tr></thead>
+          <tbody>
+            <tr *ngFor="let doc of remito.documentaciones">
+              <td>{{ doc.numero }}</td><td>{{ doc.tipo }}</td><td>{{ doc.asunto }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section class="card block" *ngIf="opciones.length && !resultado">
+    <div class="section-title">
+      <span class="step">4</span>
+      <div><h2>Registrar situación</h2><p>Opción correspondiente al flujo normal.</p></div>
+    </div>
+    <button type="button" class="option" *ngFor="let opcion of opciones" (click)="tomarOpcion(opcion)">
+      {{ opcion.descripcion }}
+    </button>
+  </section>
+
+  <section class="confirm" *ngIf="confirmacionPendiente">
+    <h2>Confirmar recepción</h2>
+    <p>Se actualizará el bolsín, sus remitos y toda la documentación.</p>
+    <button type="button" (click)="tomarConfirmacion()">Confirmar</button>
+  </section>
+
+  <section class="success" *ngIf="resultado">
+    <h2>Recepción registrada</h2>
+    <p>Bolsín: <strong>{{ resultado.estadoBolsin }}</strong></p>
+    <p>Remitos: <strong>{{ resultado.estadoRemitos }}</strong></p>
+    <p>Documentación: <strong>{{ resultado.estadoDocumentaciones }}</strong></p>
+  </section>
+</main>

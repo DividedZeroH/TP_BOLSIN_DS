@@ -1,0 +1,133 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// Las claves primarias no aparecen en el modelo de análisis, pero son necesarias
+// para identificar las filas y las relaciones en una base de datos relacional.
+model ComisionMedica {
+  id                      Int       @id @default(autoincrement())
+  nombre                  String    @unique
+  empleados               Empleado[]
+  bolsinesOrigen          Bolsin[]  @relation("ComisionOrigen")
+  bolsinesDestino         Bolsin[]  @relation("ComisionDestino")
+}
+
+model Empleado {
+  id                            Int                            @id @default(autoincrement())
+  apellido                      String
+  email                         String                         @unique
+  comisionMedicaId              Int
+  comisionMedica                ComisionMedica                @relation(fields: [comisionMedicaId], references: [id])
+  usuario                       Usuario?
+  cambiosEstadoBolsin           CambioEstadoBolsin[]
+  cambiosEstadoDocumentacion    CambioEstadoDocumentacion[]
+}
+
+model Usuario {
+  id          Int       @id @default(autoincrement())
+  empleadoId  Int       @unique
+  empleado    Empleado  @relation(fields: [empleadoId], references: [id])
+  sesiones    Sesion[]
+}
+
+model Sesion {
+  id         Int      @id @default(autoincrement())
+  usuarioId  Int
+  usuario    Usuario  @relation(fields: [usuarioId], references: [id])
+}
+
+// Estado es el catálogo común consultado mediante los predicados sos...()
+// que aparecen en el diagrama de clases y en el diagrama de secuencia.
+model Estado {
+  id                            Int                            @id @default(autoincrement())
+  Nombre                        String
+  Ambito                        String
+  SosEnviado                    Boolean                        @default(false)
+  SosAmbitoBolsin               Boolean                        @default(false)
+  cambiosEstadoBolsin           CambioEstadoBolsin[]
+  remitos                       Remito[]
+  cambiosEstadoDocumentacion    CambioEstadoDocumentacion[]
+
+  @@unique([Nombre, Ambito])
+}
+
+model Bolsin {
+  id                        Int                    @id @default(autoincrement())
+  fecha                     DateTime
+  numeroBolsin              String                 @unique
+  numeroPrecinto            String                 @unique
+  peso                      Float
+  comisionMedicaOrigenId    Int
+  comisionMedicaDestinoId   Int
+  comisionMedicaOrigen      ComisionMedica         @relation("ComisionOrigen", fields: [comisionMedicaOrigenId], references: [id])
+  comisionMedicaDestino     ComisionMedica         @relation("ComisionDestino", fields: [comisionMedicaDestinoId], references: [id])
+  remitos                   Remito[]
+  cambiosEstado             CambioEstadoBolsin[]
+}
+
+model CambioEstadoBolsin {
+  id                 Int       @id @default(autoincrement())
+  fechaHoraInicio    DateTime
+  fechaHoraFin       DateTime?
+  bolsinId           Int
+  estadoId           Int
+  empleadoId         Int
+  bolsin             Bolsin    @relation(fields: [bolsinId], references: [id])
+  estado             Estado    @relation(fields: [estadoId], references: [id])
+  empleado           Empleado  @relation(fields: [empleadoId], references: [id])
+}
+
+model Remito {
+  id          Int              @id @default(autoincrement())
+  fecha       DateTime
+  Numero      String           @unique
+  bolsinId    Int
+  estadoId    Int
+  bolsin      Bolsin           @relation(fields: [bolsinId], references: [id])
+  estado      Estado           @relation(fields: [estadoId], references: [id])
+  detalles    DetalleRemito[]
+}
+
+model DetalleRemito {
+  id                  Int            @id @default(autoincrement())
+  areaCMCDestino      String
+  remitoId            Int
+  documentacionId     Int
+  remito              Remito         @relation(fields: [remitoId], references: [id])
+  documentacion       Documentacion  @relation(fields: [documentacionId], references: [id])
+}
+
+model TipoDocumentacion {
+  id               Int              @id @default(autoincrement())
+  descripcion      String
+  nombre           String           @unique
+  documentaciones  Documentacion[]
+}
+
+model Documentacion {
+  id                    Int                            @id @default(autoincrement())
+  asunto                String
+  fechaPase             DateTime
+  numero                String                         @unique
+  tipoDocumentacionId   Int
+  tipoDocumentacion     TipoDocumentacion              @relation(fields: [tipoDocumentacionId], references: [id])
+  detallesRemito        DetalleRemito[]
+  cambiosEstado         CambioEstadoDocumentacion[]
+}
+
+model CambioEstadoDocumentacion {
+  id                 Int            @id @default(autoincrement())
+  fechaHoraInicio    DateTime
+  fechaHoraFin       DateTime?
+  documentacionId    Int
+  estadoId           Int
+  empleadoId         Int
+  documentacion      Documentacion  @relation(fields: [documentacionId], references: [id])
+  estado             Estado         @relation(fields: [estadoId], references: [id])
+  empleado           Empleado       @relation(fields: [empleadoId], references: [id])
+}

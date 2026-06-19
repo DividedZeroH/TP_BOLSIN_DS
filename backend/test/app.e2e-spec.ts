@@ -1,0 +1,104 @@
+import { INestApplication } from '@nestjs/common';
+import { Test } from '@nestjs/testing';
+import request = require('supertest');
+import { AppModule } from '../src/app.module';
+import { PrismaService } from '../src/prisma/prisma.service';
+import { GestorRegistrarRecepcionBolsin } from '../src/recepcion-bolsin/gestor-registrar-recepcion-bolsin.service';
+
+describe('Registrar recepción de bolsín (e2e)', () => {
+  let app: INestApplication;
+  let prisma: PrismaService;
+  let gestor: GestorRegistrarRecepcionBolsin;
+
+  beforeAll(async () => {
+    const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
+    app = moduleRef.createNestApplication();
+    app.setGlobalPrefix('api');
+    await app.init();
+    prisma = app.get(PrismaService);
+    gestor = app.get(GestorRegistrarRecepcionBolsin);
+  });
+
+  afterAll(async () => app.close());
+
+  it('recorre el flujo normal y conserva atomicidad ante un error', async () => {
+    const inicio = await request(app.getHttpServer())
+      .get('/api/recepciones-bolsines/iniciar?sesionId=1')
+      .expect(200);
+    expect(inicio.body.comisionMedica.nombre).toBe('Comisión Médica Córdoba');
+    expect(inicio.body.bolsines).toHaveLength(1);
+    const bolsinId = inicio.body.bolsines[0].id as number;
+
+    const detalle = await request(app.getHttpServer())
+      .get(`/api/recepciones-bolsines/${bolsinId}?sesionId=1`)
+      .expect(200);
+    expect(detalle.body.opciones).toEqual([
+      {
+        codigo: 'CONTENIDO_IGUAL',
+        descripcion: 'El contenido del bolsín es igual al registrado.',
+      },
+    ]);
+    expect(detalle.body.remitos[0].documentaciones).toHaveLength(1);
+
+    // Se fuerza un fallo luego de la primera escritura. Prisma debe revertir
+    // el cambio de bolsín y CU29 no debe ejecutarse.
+    const fallo = jest
+      .spyOn(gestor, 'actualizarEstadoRemito')
+      .mockRejectedValueOnce(new Error('Fallo simulado'));
+    const notificacion = jest.spyOn(gestor, 'llamarCU29');
+    await request(app.getHttpServer())
+      .post(`/api/recepciones-bolsines/${bolsinId}/confirmar`)
+      .send({ sesionId: 1, opcion: 'CONTENIDO_IGUAL', confirmacion: true })
+      .expect(500);
+    expect(notificacion).not.toHaveBeenCalled();
+    const historialTrasFallo = await prisma.cambioEstadoBolsin.findMany({
+      where: { bolsinId },
+      include: { estado: true },
+    });
+    expect(historialTrasFallo).toHaveLength(1);
+    expect(historialTrasFallo[0].estado.Nombre).toBe('Enviado');
+    expect(historialTrasFallo[0].fechaHoraFin).toBeNull();
+    fallo.mockRestore();
+
+    const confirmacion = await request(app.getHttpServer())
+      .post(`/api/recepciones-bolsines/${bolsinId}/confirmar`)
+      .send({ sesionId: 1, opcion: 'CONTENIDO_IGUAL', confirmacion: true })
+      .expect(201);
+    expect(confirmacion.body).toMatchObject({
+      estadoBolsin: 'Recibido',
+      estadoRemitos: 'RecibidoYAceptado',
+      estadoDocumentaciones: 'Aceptada',
+    });
+    expect(notificacion).toHaveBeenCalledWith(bolsinId);
+
+    const bolsin = await prisma.bolsin.findUniqueOrThrow({
+      where: { id: bolsinId },
+      include: {
+        cambiosEstado: { include: { estado: true, empleado: true } },
+        remitos: {
+          include: {
+            estado: true,
+            detalles: {
+              include: {
+                documentacion: {
+                  include: {
+                    cambiosEstado: { include: { estado: true, empleado: true } },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+    expect(bolsin.cambiosEstado).toHaveLength(2);
+    expect(bolsin.cambiosEstado.find((c) => c.fechaHoraFin === null)?.estado.Nombre)
+      .toBe('Recibido');
+    expect(bolsin.remitos[0].estado.Nombre).toBe('RecibidoYAceptado');
+    const cambiosDoc = bolsin.remitos[0].detalles[0].documentacion.cambiosEstado;
+    expect(cambiosDoc).toHaveLength(2);
+    const cambioAceptada = cambiosDoc.find((c) => c.fechaHoraFin === null);
+    expect(cambioAceptada?.estado.Nombre).toBe('Aceptada');
+    expect(cambioAceptada?.empleado.email).toBe('encargado.cordoba@demo.local');
+  });
+});
