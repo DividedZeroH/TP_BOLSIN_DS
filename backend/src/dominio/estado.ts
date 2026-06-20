@@ -20,7 +20,7 @@ export class Estado {
   }
 
   sosRecibido(): boolean {
-    return this.Nombre === 'Recibido';
+    return this.Nombre === 'Recibido en CM destino';
   }
 
   sosAmbitoRemito(): boolean {

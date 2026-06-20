@@ -240,7 +240,7 @@ export class GestorRegistrarRecepcionBolsin {
       const estadoRecibido = await this.buscarEstadoRecibidoBolsin(tx);
       const estadoRemito = await this.buscarEstadoRecibidoYAceptado(tx);
       const registroAceptada = await tx.estado.findUnique({
-        where: { Nombre_Ambito: { Nombre: 'Aceptada', Ambito: 'DOCUMENTACION' } },
+        where: { Nombre_Ambito: { Nombre: 'Recibida y Aceptada', Ambito: 'DOCUMENTACION' } },
       });
       if (!registroAceptada) {
         throw new NotFoundException('No se configuró el estado Aceptada.');
@@ -272,7 +272,7 @@ export class GestorRegistrarRecepcionBolsin {
 
   async buscarEstadoRecibidoBolsin(tx: Prisma.TransactionClient): Promise<Estado> {
     const registro = await tx.estado.findFirst({
-      where: { Nombre: 'Recibido', Ambito: 'BOLSIN', SosAmbitoBolsin: true },
+      where: { Nombre: 'Recibido en CM destino', Ambito: 'BOLSIN', SosAmbitoBolsin: true },
     });
     if (!registro) {
       throw new NotFoundException('No se configuró el estado Recibido del bolsín.');
@@ -374,9 +374,9 @@ export class GestorRegistrarRecepcionBolsin {
   finCU(bolsinId: number, fechaHora: Date): ResultadoRecepcionBolsin {
     return {
       bolsinId,
-      estadoBolsin: 'Recibido',
+      estadoBolsin: 'Recibido en CM destino',
       estadoRemitos: 'RecibidoYAceptado',
-      estadoDocumentaciones: 'Aceptada',
+      estadoDocumentaciones: 'RecibidaYAceptada',
       fechaHora: fechaHora.toISOString(),
     };
   }

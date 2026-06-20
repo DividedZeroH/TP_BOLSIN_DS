@@ -45,9 +45,9 @@ async function main(): Promise<void> {
       create: { Nombre: 'Enviado', Ambito: 'BOLSIN', SosEnviado: true, SosAmbitoBolsin: true },
     }),
     prisma.estado.upsert({
-      where: { Nombre_Ambito: { Nombre: 'Recibido', Ambito: 'BOLSIN' } },
+      where: { Nombre_Ambito: { Nombre: 'Recibido en CM destino', Ambito: 'BOLSIN' } },
       update: {},
-      create: { Nombre: 'Recibido', Ambito: 'BOLSIN', SosAmbitoBolsin: true },
+      create: { Nombre: 'Recibido en CM destino', Ambito: 'BOLSIN', SosAmbitoBolsin: true },
     }),
     prisma.estado.upsert({
       where: { Nombre_Ambito: { Nombre: 'Generado', Ambito: 'REMITO' } },

@@ -9,8 +9,8 @@ export class ConfirmarRecepcionBolsinDto {
 
 export interface ResultadoRecepcionBolsin {
   bolsinId: number;
-  estadoBolsin: 'Recibido';
+  estadoBolsin: 'Recibido en CM destino';
   estadoRemitos: 'RecibidoYAceptado';
-  estadoDocumentaciones: 'Aceptada';
+  estadoDocumentaciones: 'RecibidaYAceptada';
   fechaHora: string;
 }
