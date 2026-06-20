@@ -74,11 +74,8 @@ export class GestorRegistrarRecepcionBolsin {
 
   /** Inicia el CU obteniendo usuario, comisión y bolsines enviados a destino. */
   async nuevaRecepcionBolsin(sesionId: number) {
-    const sesion = await this.buscarUsuarioLogueado(sesionId);
-    const comision = sesion
-      .getUsuarioLogueado()
-      .getEmpleado()
-      .getComisionMedica();
+    const empleado = await this.buscarUsuarioLogueado(sesionId);
+    const comision = this.buscarComisionMedicaUsuario(empleado);
     const bolsines = await this.buscarBolsinEnviadoCMUsuario(comision.id);
 
     return {
@@ -94,12 +91,17 @@ export class GestorRegistrarRecepcionBolsin {
     };
   }
 
+  /** El Empleado es el experto que conoce su propia ComisionMedica. */
+  buscarComisionMedicaUsuario(empleado: Empleado): ComisionMedica {
+    return empleado.getComisionMedica();
+  }
+
   /**
    * El identificador de sesión es un parámetro técnico requerido por una API
    * web sin autenticación; la navegación Sesion -> Usuario -> Empleado es la
    * misma indicada en la secuencia.
    */
-  async buscarUsuarioLogueado(sesionId: number): Promise<Sesion> {
+  async buscarUsuarioLogueado(sesionId: number): Promise<Empleado> {
     const registro = await this.prisma.sesion.findUnique({
       where: { id: sesionId },
       include: {
@@ -113,10 +115,11 @@ export class GestorRegistrarRecepcionBolsin {
     }
 
     const empleado = this.mapearEmpleado(registro.usuario.empleado);
-    return new Sesion(
+    const sesion = new Sesion(
       registro.id,
       new Usuario(registro.usuario.id, empleado),
     );
+    return sesion.getUsuarioLogueado().getEmpleado();
   }
 
   /** Consulta únicamente bolsines cuyo cambio actual responde sosEnviado(). */
@@ -150,11 +153,8 @@ export class GestorRegistrarRecepcionBolsin {
 
   /** Recupera el agregado seleccionado y prepara la información de pantalla. */
   async tomarBolsin(sesionId: number, bolsinId: number) {
-    const sesion = await this.buscarUsuarioLogueado(sesionId);
-    const comision = sesion
-      .getUsuarioLogueado()
-      .getEmpleado()
-      .getComisionMedica();
+    const empleado = await this.buscarUsuarioLogueado(sesionId);
+    const comision = this.buscarComisionMedicaUsuario(empleado);
     const registro = await this.prisma.bolsin.findFirst({
       where: { id: bolsinId, comisionMedicaDestinoId: comision.id },
       include: bolsinCompletoInclude,
@@ -220,8 +220,7 @@ export class GestorRegistrarRecepcionBolsin {
     if (confirmacion !== true) {
       throw new BadRequestException('El flujo normal requiere confirmación.');
     }
-    const sesion = await this.buscarUsuarioLogueado(sesionId);
-    const empleado = sesion.getUsuarioLogueado().getEmpleado();
+    const empleado = await this.buscarUsuarioLogueado(sesionId);
     const fechaHora = this.getFechaHoraActual();
 
     await this.prisma.$transaction(async (tx) => {
