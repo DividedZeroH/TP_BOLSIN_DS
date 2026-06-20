@@ -6,5 +6,6 @@ import { PantallaRegistrarRecepcionBolsin } from './recepcion-bolsin/pantalla-re
   standalone: true,
   imports: [PantallaRegistrarRecepcionBolsin],
   template: '<app-pantalla-registrar-recepcion-bolsin />',
+
 })
 export class AppComponent {}

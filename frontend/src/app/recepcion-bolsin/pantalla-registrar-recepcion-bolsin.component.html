@@ -63,13 +63,13 @@
     </div>
   </section>
 
-  <section class="card block" *ngIf="opciones.length && !resultado">
+  <section class="card block" *ngIf="opciones.length">
     <div class="section-title">
       <span class="step">4</span>
       <div><h2>Registrar situación</h2><p>Opción correspondiente al flujo normal.</p></div>
     </div>
-    <button type="button" class="option" *ngFor="let opcion of opciones" (click)="tomarOpcion(opcion)">
-      {{ opcion.descripcion }}
+    <button type="button" class="option" [class.selected]="opcionSeleccionada?.codigo === opcion.codigo" *ngFor="let opcion of opcionesVisibles" (click)="tomarOpcion(opcion)">
+  {{ opcion.descripcion }}
     </button>
   </section>
 

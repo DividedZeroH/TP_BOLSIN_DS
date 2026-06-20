@@ -31,7 +31,11 @@ export interface RemitoVista {
 }
 
 export interface OpcionRecepcionVista {
-  codigo: 'CONTENIDO_IGUAL';
+  codigo:
+    | 'CONTENIDO_IGUAL'
+    | 'FALTA_DOCUMENTACION'
+    | 'DOCUMENTACION_NO_CORRESPONDE'
+    | 'REDIRIGIR_OTRA_AREA';
   descripcion: string;
 }
 

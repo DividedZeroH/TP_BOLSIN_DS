@@ -20,7 +20,9 @@ tr.selected { background: #e8f6f3; }
 button { border: 0; border-radius: 10px; padding: 11px 18px; color: white; background: #0b6e75; cursor: pointer; font-weight: 700; }
 button:hover { filter: brightness(.94); }
 button.secondary { background: #19376d; }
-button.option { width: 100%; text-align: left; padding: 16px; }
+button.option { width: 100%; text-align: left; padding: 16px; display: block; margin-bottom: 12px; }
+button.option.selected { background: #19376d; box-shadow: 0 0 0 3px #19376d33; }
+button.option:last-of-type { margin-bottom: 0; }
 .confirm, .success { margin-top: 20px; padding: 24px; border-radius: 16px; }
 .confirm { border: 1px solid #f1c96b; background: #fff8e5; }
 .success { border: 1px solid #91d2ae; background: #eaf8f0; }

@@ -34,6 +34,27 @@ export class PantallaRegistrarRecepcionBolsin implements OnInit {
   cargando = false;
   error = '';
 
+  // TODO: el backend hoy solo devuelve CONTENIDO_IGUAL. Estas 3 son
+  // temporales en el frontend para maquetar el paso 7 completo; cuando
+  // el backend soporte los otros flujos, esto se borra y vienen las 4
+  // directamente de obtenerDetalle().
+  private readonly opcionesPendientesBackend: OpcionRecepcionVista[] = [
+    {
+      codigo: 'FALTA_DOCUMENTACION',
+      descripcion:
+        'No se recibe toda la documentación asociada a los remitos que contiene el bolsín.',
+    },
+    {
+      codigo: 'DOCUMENTACION_NO_CORRESPONDE',
+      descripcion:
+        'Existe documentación que no corresponde al destino (CM del usuario logueado).',
+    },
+    {
+      codigo: 'REDIRIGIR_OTRA_AREA',
+      descripcion: 'La documentación se debe redirigir a otra área.',
+    },
+  ];
+
   constructor(private readonly api: RecepcionBolsinApiService) {}
 
   ngOnInit(): void {
@@ -101,12 +122,16 @@ export class PantallaRegistrarRecepcionBolsin implements OnInit {
   mostrarOpcionesRecepcionParaSeleccion(
     opciones: OpcionRecepcionVista[],
   ): void {
-    this.opciones = opciones;
+    this.opciones = [...opciones, ...this.opcionesPendientesBackend];
   }
 
   tomarOpcion(opcion: OpcionRecepcionVista): void {
     this.opcionSeleccionada = opcion;
     this.pedirConfirmacion();
+  }
+
+  get opcionesVisibles(): OpcionRecepcionVista[] {
+    return this.opcionSeleccionada ? [this.opcionSeleccionada] : this.opciones;
   }
 
   pedirConfirmacion(): void {
