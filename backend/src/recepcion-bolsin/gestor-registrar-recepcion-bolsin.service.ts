@@ -143,6 +143,7 @@ export class GestorRegistrarRecepcionBolsin {
     return bolsin.obtenerCMDestino().id === comisionMedica.id;
   }
 
+  
   buscarPrecintoBolsin(bolsines: Bolsin[]): string[] {
     return bolsines.map((bolsin) => bolsin.getNumeroPrecinto());
   }
