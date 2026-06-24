@@ -7,20 +7,23 @@ import {
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { Estado } from '../dominio/estado';
-import { ComisionMedica, Empleado, Sesion, Usuario } from '../dominio/identidad';
-import {
-  CambioEstadoDocumentacion,
-  DetalleRemito,
-  Documentacion,
-  Remito,
-  TipoDocumentacion,
-} from '../dominio/documentacion';
-import { Bolsin, CambioEstadoBolsin } from '../dominio/bolsin';
+import { Empleado } from '../dominio/empleado';
+import { ComisionMedica } from '../dominio/comisionMedica';
+import { Remito } from '../dominio/remito';
+import { Documentacion } from '../dominio/documentacion';
+import { Bolsin } from '../dominio/bolsin';
+import { CambioEstadoBolsin } from '../dominio/cambioEstadoBolsin';
+import { CambioEstadoDocumentacion } from '../dominio/cambioEstadoDocumentacion';
+import { DetalleRemito } from '../dominio/detalleRemito';
+import { TipoDocumentacion } from '../dominio/tipoDocumentacion';
+import { Sesion } from '../dominio/sesion';
+import { Usuario } from '../dominio/usuario';
 import {
   OPCION_CONTENIDO_IGUAL,
   OpcionRecepcion,
   ResultadoRecepcionBolsin,
 } from './recepcion-bolsin.modelos';
+
 
 /**
  * Incluye todas las relaciones que forman el agregado Bolsin. La constante se
@@ -79,13 +82,15 @@ export class GestorRegistrarRecepcionBolsin {
     const bolsines = await this.buscarBolsinEnviadoCMUsuario(comision.id);
 
     return {
+      usuarioLogueado: {
+        id: empleado.id,
+    
+      },
       comisionMedica: { id: comision.id, nombre: comision.getNombre() },
       bolsines: bolsines.map((bolsin) => ({
         id: bolsin.id,
-        fecha: bolsin.fecha,
-        numeroBolsin: bolsin.numeroBolsin,
         numeroPrecinto: bolsin.numeroPrecinto,
-        peso: bolsin.peso,
+
         comisionMedicaOrigen: bolsin.comisionMedicaOrigen,
       })),
     };
@@ -140,11 +145,11 @@ export class GestorRegistrarRecepcionBolsin {
     bolsin: Bolsin,
     comisionMedica: ComisionMedica,
   ): boolean {
-    return bolsin.obtenerCMDestino().id === comisionMedica.id;
+    return bolsin.obtenerTuCMDestino().id === comisionMedica.id;
   }
 
   
-  buscarPrecintoBolsin(bolsines: Bolsin[]): string[] {
+  buscarPrecintoBolsin(bolsines: Bolsin[]): number[] {
     return bolsines.map((bolsin) => bolsin.getNumeroPrecinto());
   }
 
@@ -172,14 +177,12 @@ export class GestorRegistrarRecepcionBolsin {
 
     return {
       id: bolsin.id,
-      numeroBolsin: bolsin.getNumeroBolsin(),
       numeroPrecinto: bolsin.getNumeroPrecinto(),
       remitos: remitos.map((remito) => ({
         id: remito.id,
         numero: remito.getNumero(),
         documentaciones: remito.buscarDocumentacion().map((documentacion) => ({
           id: documentacion.id,
-          numero: documentacion.numero,
           tipo: documentacion.mostrarTipoDocumentacion(),
           asunto: documentacion.getAsunto(),
         })),
@@ -219,7 +222,7 @@ export class GestorRegistrarRecepcionBolsin {
     confirmacion: boolean,
   ): Promise<ResultadoRecepcionBolsin> {
     if (confirmacion !== true) {
-      throw new BadRequestException('El flujo normal requiere confirmación.');
+      throw new BadRequestException('La confirmación es requerida.');
     }
     const empleado = await this.buscarUsuarioLogueado(sesionId);
     const fechaHora = this.getFechaHoraActual();
@@ -240,7 +243,7 @@ export class GestorRegistrarRecepcionBolsin {
       const estadoRecibido = await this.buscarEstadoRecibidoBolsin(tx);
       const estadoRemito = await this.buscarEstadoRecibidoYAceptado(tx);
       const registroAceptada = await tx.estado.findUnique({
-        where: { Nombre_Ambito: { Nombre: 'Recibida y Aceptada', Ambito: 'DOCUMENTACION' } },
+        where: { Nombre_Ambito: { Nombre: 'Aceptada', Ambito: 'DOCUMENTACION' } },
       });
       if (!registroAceptada) {
         throw new NotFoundException('No se configuró el estado Aceptada.');
@@ -267,12 +270,12 @@ export class GestorRegistrarRecepcionBolsin {
     // La notificación ocurre después del commit para no anunciar una recepción
     // que finalmente pudiera revertirse.
     this.llamarCU29(bolsinId);
-    return this.finCU(bolsinId, fechaHora);
+    return this.finDelCU(bolsinId, fechaHora);
   }
 
   async buscarEstadoRecibidoBolsin(tx: Prisma.TransactionClient): Promise<Estado> {
     const registro = await tx.estado.findFirst({
-      where: { Nombre: 'Recibido en CM destino', Ambito: 'BOLSIN', SosAmbitoBolsin: true },
+      where: { Nombre: 'Recibido', Ambito: 'BOLSIN', SosAmbitoBolsin: true },
     });
     if (!registro) {
       throw new NotFoundException('No se configuró el estado Recibido del bolsín.');
@@ -371,12 +374,12 @@ export class GestorRegistrarRecepcionBolsin {
     this.logger.log(`CU29 solicitado para el bolsín ${bolsinId}.`);
   }
 
-  finCU(bolsinId: number, fechaHora: Date): ResultadoRecepcionBolsin {
+  finDelCU(bolsinId: number, fechaHora: Date): ResultadoRecepcionBolsin {
     return {
       bolsinId,
-      estadoBolsin: 'Recibido en CM destino',
+      estadoBolsin: 'Recibido',
       estadoRemitos: 'RecibidoYAceptado',
-      estadoDocumentaciones: 'RecibidaYAceptada',
+      estadoDocumentaciones: 'Aceptada',
       fechaHora: fechaHora.toISOString(),
     };
   }
@@ -392,16 +395,14 @@ export class GestorRegistrarRecepcionBolsin {
       registro.id,
       registro.Nombre,
       registro.Ambito,
-      registro.SosEnviado,
-      registro.SosAmbitoBolsin,
+ 
     );
   }
 
   private mapearEmpleado(registro: EmpleadoConComision): Empleado {
     return new Empleado(
       registro.id,
-      registro.apellido,
-      registro.email,
+
       new ComisionMedica(
         registro.comisionMedica.id,
         registro.comisionMedica.nombre,
@@ -424,7 +425,6 @@ export class GestorRegistrarRecepcionBolsin {
         const doc = detalle.documentacion;
         const tipo = new TipoDocumentacion(
           doc.tipoDocumentacion.id,
-          doc.tipoDocumentacion.descripcion,
           doc.tipoDocumentacion.nombre,
         );
         const cambios = doc.cambiosEstado.map(
@@ -437,25 +437,25 @@ export class GestorRegistrarRecepcionBolsin {
               this.mapearEmpleado(cambio.empleado),
             ),
         );
+        // El origen de la documentación se asocia con la comisión de origen del bolsín
         return new DetalleRemito(
           detalle.id,
-          detalle.areaCMCDestino,
           new Documentacion(
             doc.id,
             doc.asunto,
-            doc.fechaPase,
-            doc.numero,
             tipo,
             cambios,
+            comisionOrigen,
           ),
         );
       });
       return new Remito(
         remito.id,
-        remito.fecha,
         remito.Numero,
         this.mapearEstado(remito.estado),
         detalles,
+        comisionOrigen,
+        comisionDestino,
       );
     });
     const cambios = registro.cambiosEstado.map(
@@ -471,14 +471,12 @@ export class GestorRegistrarRecepcionBolsin {
 
     return new Bolsin(
       registro.id,
-      registro.fecha,
-      registro.numeroBolsin,
       registro.numeroPrecinto,
-      registro.peso,
       comisionOrigen,
       comisionDestino,
       remitos,
       cambios,
+
     );
   }
 }

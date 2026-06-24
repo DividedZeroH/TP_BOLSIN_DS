@@ -21,12 +21,13 @@ describe('Registrar recepción de bolsín (e2e)', () => {
 
   afterAll(async () => app.close());
 
-  it('recorre el flujo normal y conserva atomicidad ante un error', async () => {
+  it('recorre el flujo normal y conserva atomicidad ante errores', async () => {
     const inicio = await request(app.getHttpServer())
       .get('/api/recepciones-bolsines/iniciar?sesionId=1')
       .expect(200);
+    expect(inicio.body.usuarioLogueado.email).toBe('encargado.cordoba@demo.local');
     expect(inicio.body.comisionMedica.nombre).toBe('Comisión Médica Córdoba');
-    expect(inicio.body.bolsines).toHaveLength(1);
+    expect(inicio.body.bolsines).toHaveLength(5);
     const bolsinId = inicio.body.bolsines[0].id as number;
 
     const detalle = await request(app.getHttpServer())
@@ -38,7 +39,24 @@ describe('Registrar recepción de bolsín (e2e)', () => {
         descripcion: 'El contenido del bolsín es igual al registrado.',
       },
     ]);
-    expect(detalle.body.remitos[0].documentaciones).toHaveLength(1);
+    expect(detalle.body.remitos).toHaveLength(2);
+    expect(
+      detalle.body.remitos.flatMap((remito: { documentaciones: unknown[] }) =>
+        remito.documentaciones,
+      ),
+    ).toHaveLength(4);
+
+    await request(app.getHttpServer())
+      .post(`/api/recepciones-bolsines/${bolsinId}/confirmar`)
+      .send({ sesionId: 1, opcion: 'FALTA_DOCUMENTACION', confirmacion: true })
+      .expect(400);
+    const historialTrasOpcionInvalida = await prisma.cambioEstadoBolsin.findMany({
+      where: { bolsinId },
+      include: { estado: true },
+    });
+    expect(historialTrasOpcionInvalida).toHaveLength(1);
+    expect(historialTrasOpcionInvalida[0].estado.Nombre).toBe('Enviado');
+    expect(historialTrasOpcionInvalida[0].fechaHoraFin).toBeNull();
 
     // Se fuerza un fallo luego de la primera escritura. Prisma debe revertir
     // el cambio de bolsín y CU29 no debe ejecutarse.
@@ -92,13 +110,21 @@ describe('Registrar recepción de bolsín (e2e)', () => {
       },
     });
     expect(bolsin.cambiosEstado).toHaveLength(2);
-    expect(bolsin.cambiosEstado.find((c) => c.fechaHoraFin === null)?.estado.Nombre)
-      .toBe('Recibido');
-    expect(bolsin.remitos[0].estado.Nombre).toBe('RecibidoYAceptado');
-    const cambiosDoc = bolsin.remitos[0].detalles[0].documentacion.cambiosEstado;
-    expect(cambiosDoc).toHaveLength(2);
-    const cambioAceptada = cambiosDoc.find((c) => c.fechaHoraFin === null);
-    expect(cambioAceptada?.estado.Nombre).toBe('Aceptada');
-    expect(cambioAceptada?.empleado.email).toBe('encargado.cordoba@demo.local');
+    expect(
+      bolsin.cambiosEstado.find((c) => c.fechaHoraFin === null)?.estado.Nombre,
+    ).toBe('Recibido');
+    expect(bolsin.remitos.every((remito) => remito.estado.Nombre === 'RecibidoYAceptado'))
+      .toBe(true);
+    const cambiosDoc = bolsin.remitos.flatMap((remito) =>
+      remito.detalles.flatMap((detalle) =>
+        detalle.documentacion.cambiosEstado,
+      ),
+    );
+    expect(cambiosDoc).toHaveLength(8);
+    const cambiosAceptada = cambiosDoc.filter((c) => c.fechaHoraFin === null);
+    expect(cambiosAceptada).toHaveLength(4);
+    expect(cambiosAceptada.every((c) => c.estado.Nombre === 'Aceptada')).toBe(true);
+    expect(cambiosAceptada.every((c) => c.empleado.email === 'encargado.cordoba@demo.local'))
+      .toBe(true);
   });
 });

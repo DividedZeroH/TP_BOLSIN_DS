@@ -1,0 +1,149 @@
+<main class="page-shell">
+  <section class="header-band" aria-labelledby="titulo-recepcion">
+    <h1 id="titulo-recepcion">Registrar recepcion de bolsin</h1>
+    <p>Usuario logueado: {{ usuarioLogueadoTexto }}</p>
+  </section>
+
+  <section class="step-card">
+    <span class="step-number">1</span>
+    <div>
+      <h2>Comision medica del usuario</h2>
+      <p class="strong">{{ inicio?.comisionMedica?.nombre || 'Comision medica' }}</p>
+    </div>
+  </section>
+
+  <section class="step-card">
+    <span class="step-number">2</span>
+    <div class="step-content">
+      <h2>Seleccionar bolsin enviado</h2>
+      <p class="muted">Se muestran unicamente los destinados a la comision del usuario.</p>
+
+      <p *ngIf="cargando" class="state-message">Cargando bolsines...</p>
+      <p *ngIf="mensajeCarga" class="state-message error-text">{{ mensajeCarga }}</p>
+      <p *ngIf="!cargando && bolsines.length === 0" class="state-message">
+        No hay bolsines disponibles.
+      </p>
+
+      <div *ngIf="!cargando && bolsines.length > 0" class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Precinto</th>
+              <th>Origen</th>
+              <th class="action-col"></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              *ngFor="let bolsin of bolsines; trackBy: trackByBolsin"
+              [class.selected-row]="bolsinSeleccionado?.id === bolsin.id"
+            >
+              <td>{{ bolsin.numeroPrecinto }}</td>
+              <td>{{ bolsin.comisionMedicaOrigen.nombre }}</td>
+              <td class="action-col">
+                <button type="button" class="primary-button" (click)="seleccionarBolsin(bolsin)">
+                  Seleccionar
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section *ngIf="bolsinSeleccionado" class="step-card">
+    <span class="step-number">3</span>
+    <div class="step-content">
+      <h2>Documentacion registrada</h2>
+      <p class="muted">Precinto {{ bolsinSeleccionado.numeroPrecinto }}</p>
+
+      <p *ngIf="cargandoDetalle" class="state-message">Cargando documentacion...</p>
+
+      <div *ngIf="detalle && !cargandoDetalle" class="remito-list">
+        <article *ngFor="let remito of detalle.remitos; trackBy: trackByRemito" class="remito-block">
+          <h3>Remito {{ remito.numero }}</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>Tipo</th>
+                <th>Asunto</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                *ngFor="
+                  let documentacion of remito.documentaciones;
+                  trackBy: trackByDocumentacion
+                "
+              >
+                <td>{{ documentacion.tipo }}</td>
+                <td>{{ documentacion.asunto }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section *ngIf="bolsinSeleccionado" class="step-card">
+    <span class="step-number">4</span>
+    <div class="step-content">
+      <h2>Registrar situacion</h2>
+      <div class="option-list" role="listbox" aria-label="Situaciones de recepcion">
+        <button
+          *ngFor="let opcion of opcionesRecepcion"
+          type="button"
+          class="option-button"
+          [class.option-selected]="opcionSeleccionada === opcion.codigo"
+          (click)="seleccionarOpcion(opcion.codigo)"
+        >
+          {{ opcion.descripcion }}
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <section *ngIf="bolsinSeleccionado" class="confirm-panel">
+    <h2>Confirmar recepcion</h2>
+    <p>Se registrara la situacion seleccionada para el bolsin.</p>
+    <p *ngIf="opcionSeleccionada">
+      Opcion seleccionada: <strong>{{ opcionSeleccionadaTexto }}</strong>
+    </p>
+    <div class="confirm-actions">
+      <button
+        type="button"
+        class="secondary-button"
+        (click)="cancelarConfirmacion()"
+        [disabled]="confirmando"
+      >
+        Cancelar
+      </button>
+      <button
+        type="button"
+        class="primary-button"
+        (click)="confirmarRecepcion()"
+        [disabled]="confirmando"
+      >
+        Confirmar
+      </button>
+    </div>
+  </section>
+</main>
+
+<div *ngIf="modal" class="modal-backdrop" role="presentation">
+  <section
+    class="modal"
+    [class.modal-error]="modal.tipo === 'error'"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="modal-title"
+  >
+    <h2 id="modal-title">{{ modal.titulo }}</h2>
+    <p>{{ modal.mensaje }}</p>
+    <div class="modal-actions">
+      <button type="button" class="primary-button" (click)="cerrarModal()">Aceptar</button>
+    </div>
+  </section>
+</div>

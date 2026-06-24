@@ -4,4 +4,4 @@ import { AppComponent } from './app/app.component';
 
 bootstrapApplication(AppComponent, {
   providers: [provideHttpClient()],
-}).catch((error: unknown) => console.error(error));
+}).catch((error) => console.error(error));

@@ -60,7 +60,7 @@ model Bolsin {
   id                        Int                    @id @default(autoincrement())
   fecha                     DateTime
   numeroBolsin              String                 @unique
-  numeroPrecinto            String                 @unique
+  numeroPrecinto            Int                    @unique
   peso                      Float
   comisionMedicaOrigenId    Int
   comisionMedicaDestinoId   Int
@@ -85,7 +85,7 @@ model CambioEstadoBolsin {
 model Remito {
   id          Int              @id @default(autoincrement())
   fecha       DateTime
-  Numero      String           @unique
+  Numero      Int              @unique
   bolsinId    Int
   estadoId    Int
   bolsin      Bolsin           @relation(fields: [bolsinId], references: [id])

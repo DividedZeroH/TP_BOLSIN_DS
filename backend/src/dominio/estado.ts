@@ -1,37 +1,33 @@
-/**
- * Catálogo de estados compartido por bolsines, remitos y documentación.
- * Los predicados mantienen literalmente las responsabilidades del diagrama.
- */
+
 export class Estado {
   constructor(
     public readonly id: number,
     public readonly Nombre: string,
     public readonly Ambito: string,
-    public readonly SosEnviado: boolean,
-    public readonly SosAmbitoBolsin: boolean,
+  
   ) {}
 
   sosEnviado(): boolean {
-    return this.SosEnviado;
+    return this.Nombre.toUpperCase() === 'ENVIADO';
   }
 
   sosAmbitoBolsin(): boolean {
-    return this.SosAmbitoBolsin || this.Ambito === 'BOLSIN';
+    return this.Ambito.toUpperCase() === 'BOLSIN';
   }
 
   sosRecibido(): boolean {
-    return this.Nombre === 'Recibido en CM destino';
+    return this.Nombre.toUpperCase() === 'RECIBIDO';
   }
 
   sosAmbitoRemito(): boolean {
-    return this.Ambito === 'REMITO';
+    return this.Ambito.toUpperCase() === 'REMITO';
   }
 
   sosRecibidoYAceptado(): boolean {
-    return this.Nombre === 'RecibidoYAceptado';
+    return this.Nombre.toUpperCase() === 'RECIBIDOYACEPTADO';
   }
 
   sosAmbitoDocumentacion(): boolean {
-    return this.Ambito === 'DOCUMENTACION';
+    return this.Ambito.toUpperCase() === 'DOCUMENTACION';
   }
 }

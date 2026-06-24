@@ -1,5 +1,12 @@
 export const OPCION_CONTENIDO_IGUAL = 'CONTENIDO_IGUAL' as const;
-export type OpcionRecepcion = typeof OPCION_CONTENIDO_IGUAL;
+export const OPCIONES_RECEPCION = [
+  OPCION_CONTENIDO_IGUAL,
+  'FALTA_DOCUMENTACION',
+  'DOCUMENTACION_NO_CORRESPONDE',
+  'REDIRIGIR_OTRA_AREA',
+] as const;
+
+export type OpcionRecepcion = (typeof OPCIONES_RECEPCION)[number];
 
 export class ConfirmarRecepcionBolsinDto {
   sesionId!: number;
@@ -9,8 +16,8 @@ export class ConfirmarRecepcionBolsinDto {
 
 export interface ResultadoRecepcionBolsin {
   bolsinId: number;
-  estadoBolsin: 'Recibido en CM destino';
+  estadoBolsin: 'Recibido';
   estadoRemitos: 'RecibidoYAceptado';
-  estadoDocumentaciones: 'RecibidaYAceptada';
+  estadoDocumentaciones: 'Aceptada';
   fechaHora: string;
 }
