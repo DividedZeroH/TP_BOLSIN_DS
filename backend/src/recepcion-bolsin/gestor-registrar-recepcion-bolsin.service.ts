@@ -1,79 +1,66 @@
 import {
   BadRequestException,
+  Inject,
   Injectable,
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
-import { PrismaService } from '../prisma/prisma.service';
-import { Estado } from '../dominio/estado';
+import {
+  AMBITO_DOCUMENTACION,
+  AMBITO_REMITO,
+  Estado,
+  NOMBRE_ESTADO_ACEPTADA,
+  NOMBRE_ESTADO_RECIBIDO,
+  NOMBRE_ESTADO_RECIBIDO_Y_ACEPTADO,
+} from '../dominio/estado';
 import { Empleado } from '../dominio/empleado';
 import { ComisionMedica } from '../dominio/comisionMedica';
 import { Remito } from '../dominio/remito';
 import { Documentacion } from '../dominio/documentacion';
 import { Bolsin } from '../dominio/bolsin';
-import { CambioEstadoBolsin } from '../dominio/cambioEstadoBolsin';
-import { CambioEstadoDocumentacion } from '../dominio/cambioEstadoDocumentacion';
-import { DetalleRemito } from '../dominio/detalleRemito';
-import { TipoDocumentacion } from '../dominio/tipoDocumentacion';
 import { Sesion } from '../dominio/sesion';
 import { Usuario } from '../dominio/usuario';
 import {
   OPCION_CONTENIDO_IGUAL,
   OpcionRecepcion,
-  ResultadoRecepcionBolsin,
 } from './recepcion-bolsin.modelos';
-
-
-/**
- * Incluye todas las relaciones que forman el agregado Bolsin. La constante se
- * comparte entre las consultas y el tipo generado por Prisma para impedir que
- * una modificación de la consulta deje al mapeo desactualizado.
- */
-const bolsinCompletoInclude = Prisma.validator<Prisma.BolsinInclude>()({
-  comisionMedicaOrigen: true,
-  comisionMedicaDestino: true,
-  cambiosEstado: {
-    include: { estado: true, empleado: { include: { comisionMedica: true } } },
-  },
-  remitos: {
-    include: {
-      estado: true,
-      detalles: {
-        include: {
-          documentacion: {
-            include: {
-              tipoDocumentacion: true,
-              cambiosEstado: {
-                include: {
-                  estado: true,
-                  empleado: { include: { comisionMedica: true } },
-                },
-              },
-            },
-          },
-        },
-      },
-    },
-  },
-});
-
-type BolsinCompleto = Prisma.BolsinGetPayload<{
-  include: typeof bolsinCompletoInclude;
-}>;
-type EmpleadoConComision = Prisma.EmpleadoGetPayload<{
-  include: { comisionMedica: true };
-}>;
+import { ResultadoRecepcionBolsin } from './resultado-recepcion-bolsin';
+import { MANEJADORES_OPCION_RECEPCION } from './opcion-recepcion.handlers';
+import { BolsinMapper } from './bolsin.mapper';
+import {
+  ISesionRepository,
+  SESION_REPOSITORY,
+} from './repositorios/sesion.repository';
+import {
+  BOLSIN_REPOSITORY,
+  IBolsinRepository,
+} from './repositorios/bolsin.repository';
+import {
+  ESTADO_REPOSITORY,
+  IEstadoRepository,
+} from './repositorios/estado.repository';
 
 /**
  * Clase Control/Gestor del análisis. Coordina exactamente el flujo normal y
  * mantiene las decisiones de negocio fuera del controlador HTTP.
+ *
+ * Depende únicamente de abstracciones de repositorio (DIP): no conoce
+ * Prisma ni ningún detalle de persistencia, eso queda encapsulado en las
+ * implementaciones `Prisma*Repository`.
  */
 @Injectable()
 export class GestorRegistrarRecepcionBolsin {
   private readonly logger = new Logger(GestorRegistrarRecepcionBolsin.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    @Inject(SESION_REPOSITORY)
+    private readonly sesionRepository: ISesionRepository,
+    @Inject(BOLSIN_REPOSITORY)
+    private readonly bolsinRepository: IBolsinRepository,
+    @Inject(ESTADO_REPOSITORY)
+    private readonly estadoRepository: IEstadoRepository,
+    private readonly mapper: BolsinMapper,
+  ) {}
 
   /** Inicia el CU obteniendo usuario, comisión y bolsines enviados a destino. */
   async nuevaRecepcionBolsin(sesionId: number) {
@@ -84,13 +71,11 @@ export class GestorRegistrarRecepcionBolsin {
     return {
       usuarioLogueado: {
         id: empleado.id,
-    
       },
       comisionMedica: { id: comision.id, nombre: comision.getNombre() },
       bolsines: bolsines.map((bolsin) => ({
         id: bolsin.id,
         numeroPrecinto: bolsin.numeroPrecinto,
-
         comisionMedicaOrigen: bolsin.comisionMedicaOrigen,
       })),
     };
@@ -107,19 +92,14 @@ export class GestorRegistrarRecepcionBolsin {
    * misma indicada en la secuencia.
    */
   async buscarUsuarioLogueado(sesionId: number): Promise<Empleado> {
-    const registro = await this.prisma.sesion.findUnique({
-      where: { id: sesionId },
-      include: {
-        usuario: {
-          include: { empleado: { include: { comisionMedica: true } } },
-        },
-      },
-    });
+    const registro = await this.sesionRepository.buscarConUsuarioYEmpleado(
+      sesionId,
+    );
     if (!registro) {
       throw new NotFoundException('No se encontró la sesión indicada.');
     }
 
-    const empleado = this.mapearEmpleado(registro.usuario.empleado);
+    const empleado = this.mapper.mapearEmpleado(registro.usuario.empleado);
     const sesion = new Sesion(
       registro.id,
       new Usuario(registro.usuario.id, empleado),
@@ -129,16 +109,9 @@ export class GestorRegistrarRecepcionBolsin {
 
   /** Consulta únicamente bolsines cuyo cambio actual responde sosEnviado(). */
   async buscarBolsinEnviadoCMUsuario(comisionMedicaId: number) {
-    return this.prisma.bolsin.findMany({
-      where: {
-        comisionMedicaDestinoId: comisionMedicaId,
-        cambiosEstado: {
-          some: { fechaHoraFin: null, estado: { SosEnviado: true } },
-        },
-      },
-      include: { comisionMedicaOrigen: true },
-      orderBy: { fecha: 'asc' },
-    });
+    return this.bolsinRepository.buscarEnviadosPorComisionDestino(
+      comisionMedicaId,
+    );
   }
 
   validarComisionMedicaBolsin(
@@ -148,7 +121,6 @@ export class GestorRegistrarRecepcionBolsin {
     return bolsin.obtenerTuCMDestino().id === comisionMedica.id;
   }
 
-  
   buscarPrecintoBolsin(bolsines: Bolsin[]): number[] {
     return bolsines.map((bolsin) => bolsin.getNumeroPrecinto());
   }
@@ -161,15 +133,15 @@ export class GestorRegistrarRecepcionBolsin {
   async tomarBolsin(sesionId: number, bolsinId: number) {
     const empleado = await this.buscarUsuarioLogueado(sesionId);
     const comision = this.buscarComisionMedicaUsuario(empleado);
-    const registro = await this.prisma.bolsin.findFirst({
-      where: { id: bolsinId, comisionMedicaDestinoId: comision.id },
-      include: bolsinCompletoInclude,
-    });
+    const registro = await this.bolsinRepository.buscarCompletoPorIdYDestino(
+      bolsinId,
+      comision.id,
+    );
     if (!registro) {
       throw new NotFoundException('No se encontró el bolsín seleccionado.');
     }
 
-    const bolsin = this.mapearBolsin(registro);
+    const bolsin = this.mapper.mapearBolsin(registro);
     if (!this.validarComisionMedicaBolsin(bolsin, comision) || !bolsin.sosEnviado()) {
       throw new NotFoundException('El bolsín no está disponible para esta comisión.');
     }
@@ -204,16 +176,22 @@ export class GestorRegistrarRecepcionBolsin {
     return bolsin.buscarDocumentacionBolsin();
   }
 
-  /** Solo acepta la primera opción porque los flujos alternativos están fuera. */
+  /**
+   * Despacha por tabla de manejadores (OCP): agregar una opción nueva del
+   * flujo alternativo implica registrar una entrada en
+   * `MANEJADORES_OPCION_RECEPCION`, no modificar un `if/else` existente acá.
+   * Las opciones todavía no implementadas siguen rechazándose igual que antes.
+   */
   tomarOpcion(opcion: OpcionRecepcion): OpcionRecepcion {
-    if (opcion !== OPCION_CONTENIDO_IGUAL) {
+    const manejador = MANEJADORES_OPCION_RECEPCION[opcion];
+    if (!manejador || !manejador.implementado) {
       throw new BadRequestException('La opción no pertenece al flujo normal implementado.');
     }
     return opcion;
   }
 
   /**
-   * Confirma el CU. $transaction garantiza que ninguna entidad quede en un
+   * Confirma el CU. La transacción garantiza que ninguna entidad quede en un
    * estado parcial si una escritura inesperada falla.
    */
   async tomarConfirmacion(
@@ -227,28 +205,21 @@ export class GestorRegistrarRecepcionBolsin {
     const empleado = await this.buscarUsuarioLogueado(sesionId);
     const fechaHora = this.getFechaHoraActual();
 
-    await this.prisma.$transaction(async (tx) => {
-      const registro = await tx.bolsin.findUnique({
-        where: { id: bolsinId },
-        include: bolsinCompletoInclude,
-      });
+    await this.bolsinRepository.ejecutarEnTransaccion(async (tx) => {
+      const registro = await this.bolsinRepository.buscarCompletoPorIdEnTx(
+        tx,
+        bolsinId,
+      );
       if (!registro) {
         throw new NotFoundException('No se encontró el bolsín seleccionado.');
       }
-      const bolsin = this.mapearBolsin(registro);
+      const bolsin = this.mapper.mapearBolsin(registro);
       if (!this.validarComisionMedicaBolsin(bolsin, empleado.getComisionMedica())) {
         throw new NotFoundException('El bolsín no pertenece a la comisión del usuario.');
       }
 
       const estadoRecibido = await this.buscarEstadoRecibidoBolsin(tx);
       const estadoRemito = await this.buscarEstadoRecibidoYAceptado(tx);
-      const registroAceptada = await tx.estado.findUnique({
-        where: { Nombre_Ambito: { Nombre: 'Aceptada', Ambito: 'DOCUMENTACION' } },
-      });
-      if (!registroAceptada) {
-        throw new NotFoundException('No se configuró el estado Aceptada.');
-      }
-      const estadoAceptada = this.mapearEstado(registroAceptada);
 
       await this.registrarCambioEstadoBolsin(
         tx,
@@ -258,13 +229,7 @@ export class GestorRegistrarRecepcionBolsin {
         fechaHora,
       );
       await this.actualizarEstadoRemito(tx, bolsin, estadoRemito);
-      await this.actualizarDocumentacion(
-        tx,
-        bolsin,
-        estadoAceptada,
-        empleado,
-        fechaHora,
-      );
+      await this.actualizarDocumentacion(tx, bolsin, empleado, fechaHora);
     });
 
     // La notificación ocurre después del commit para no anunciar una recepción
@@ -273,14 +238,15 @@ export class GestorRegistrarRecepcionBolsin {
     return this.finDelCU(bolsinId, fechaHora);
   }
 
-  async buscarEstadoRecibidoBolsin(tx: Prisma.TransactionClient): Promise<Estado> {
-    const registro = await tx.estado.findFirst({
-      where: { Nombre: 'Recibido', Ambito: 'BOLSIN', SosAmbitoBolsin: true },
-    });
+  async buscarEstadoRecibidoBolsin(tx: unknown): Promise<Estado> {
+    const registro = await this.estadoRepository.buscarEstadoBolsinPorNombre(
+      tx,
+      NOMBRE_ESTADO_RECIBIDO,
+    );
     if (!registro) {
       throw new NotFoundException('No se configuró el estado Recibido del bolsín.');
     }
-    const estado = this.mapearEstado(registro);
+    const estado = this.mapper.mapearEstado(registro);
     if (!estado.sosAmbitoBolsin() || !estado.sosRecibido()) {
       throw new NotFoundException('El estado Recibido no pertenece al ámbito Bolsin.');
     }
@@ -292,7 +258,7 @@ export class GestorRegistrarRecepcionBolsin {
   }
 
   async registrarCambioEstadoBolsin(
-    tx: Prisma.TransactionClient,
+    tx: unknown,
     bolsin: Bolsin,
     estado: Estado,
     empleado: Empleado,
@@ -300,76 +266,86 @@ export class GestorRegistrarRecepcionBolsin {
   ): Promise<void> {
     // Primero se aplica la regla del dominio y luego se refleja en SQLite.
     bolsin.registrarCambioEstadoBolsin(estado, empleado, fechaHora);
-    await tx.cambioEstadoBolsin.updateMany({
-      where: { bolsinId: bolsin.id, fechaHoraFin: null },
-      data: { fechaHoraFin: fechaHora },
-    });
-    await tx.cambioEstadoBolsin.create({
-      data: {
-        bolsinId: bolsin.id,
-        estadoId: estado.id,
-        empleadoId: empleado.id,
-        fechaHoraInicio: fechaHora,
-      },
-    });
+    await this.bolsinRepository.registrarCambioEstadoBolsin(
+      tx,
+      bolsin.id,
+      estado.id,
+      empleado.id,
+      fechaHora,
+    );
   }
 
-  async buscarEstadoRecibidoYAceptado(
-    tx: Prisma.TransactionClient,
-  ): Promise<Estado> {
-    const registro = await tx.estado.findUnique({
-      where: {
-        Nombre_Ambito: { Nombre: 'RecibidoYAceptado', Ambito: 'REMITO' },
-      },
-    });
+  async buscarEstadoRecibidoYAceptado(tx: unknown): Promise<Estado> {
+    const registro = await this.estadoRepository.buscarPorNombreYAmbitoEnTx(
+      tx,
+      NOMBRE_ESTADO_RECIBIDO_Y_ACEPTADO,
+      AMBITO_REMITO,
+    );
     if (!registro) {
       throw new NotFoundException('No se configuró RecibidoYAceptado para remitos.');
     }
-    const estado = this.mapearEstado(registro);
+    const estado = this.mapper.mapearEstado(registro);
     if (!estado.sosAmbitoRemito() || !estado.sosRecibidoYAceptado()) {
       throw new NotFoundException('El estado no corresponde a remitos recibidos.');
     }
     return estado;
   }
 
+  /**
+   * Método público de instancia: el test e2e lo mockea con
+   * `jest.spyOn(gestor, 'actualizarEstadoRemito')` para forzar un fallo a
+   * mitad de la transacción y verificar el rollback. Debe seguir invocándose
+   * vía `this.actualizarEstadoRemito(...)` para que el spy intercepte la
+   * llamada real.
+   */
   async actualizarEstadoRemito(
-    tx: Prisma.TransactionClient,
+    tx: unknown,
     bolsin: Bolsin,
     estado: Estado,
   ): Promise<void> {
     bolsin.actualizarEstadoRemito(estado);
-    await tx.remito.updateMany({
-      where: { bolsinId: bolsin.id },
-      data: { estadoId: estado.id },
-    });
+    await this.bolsinRepository.actualizarEstadoRemitos(
+      tx,
+      bolsin.id,
+      estado.id,
+    );
   }
 
   async actualizarDocumentacion(
-    tx: Prisma.TransactionClient,
+    tx: unknown,
     bolsin: Bolsin,
-    estado: Estado,
     empleado: Empleado,
     fechaHora: Date,
   ): Promise<void> {
+    const registro = await this.estadoRepository.buscarPorNombreYAmbitoEnTx(
+      tx,
+      NOMBRE_ESTADO_ACEPTADA,
+      AMBITO_DOCUMENTACION,
+    );
+    if (!registro) {
+      throw new NotFoundException('No se configuró el estado Aceptada.');
+    }
+    const estado = this.mapper.mapearEstado(registro);
+
     bolsin.actualizarDocumentacion(estado, empleado, fechaHora);
     const documentaciones = bolsin.buscarDocumentacionBolsin();
     for (const documentacion of documentaciones) {
-      await tx.cambioEstadoDocumentacion.updateMany({
-        where: { documentacionId: documentacion.id, fechaHoraFin: null },
-        data: { fechaHoraFin: fechaHora },
-      });
-      await tx.cambioEstadoDocumentacion.create({
-        data: {
-          documentacionId: documentacion.id,
-          estadoId: estado.id,
-          empleadoId: empleado.id,
-          fechaHoraInicio: fechaHora,
-        },
-      });
+      await this.bolsinRepository.registrarCambioEstadoDocumentacion(
+        tx,
+        documentacion.id,
+        estado.id,
+        empleado.id,
+        fechaHora,
+      );
     }
   }
 
-  /** Punto explícito de integración con el CU 29, no modelado en esta entrega. */
+  /**
+   * Punto explícito de integración con el CU 29, no modelado en esta entrega.
+   * Método público de instancia: el test e2e lo mockea con
+   * `jest.spyOn(gestor, 'llamarCU29')` para verificar que NO se invoca si la
+   * transacción de confirmación falla.
+   */
   llamarCU29(bolsinId: number): void {
     this.logger.log(`CU29 solicitado para el bolsín ${bolsinId}.`);
   }
@@ -382,101 +358,5 @@ export class GestorRegistrarRecepcionBolsin {
       estadoDocumentaciones: 'Aceptada',
       fechaHora: fechaHora.toISOString(),
     };
-  }
-
-  private mapearEstado(registro: {
-    id: number;
-    Nombre: string;
-    Ambito: string;
-    SosEnviado: boolean;
-    SosAmbitoBolsin: boolean;
-  }): Estado {
-    return new Estado(
-      registro.id,
-      registro.Nombre,
-      registro.Ambito,
- 
-    );
-  }
-
-  private mapearEmpleado(registro: EmpleadoConComision): Empleado {
-    return new Empleado(
-      registro.id,
-
-      new ComisionMedica(
-        registro.comisionMedica.id,
-        registro.comisionMedica.nombre,
-      ),
-    );
-  }
-
-  /** Convierte la estructura persistente en las clases puras del dominio. */
-  private mapearBolsin(registro: BolsinCompleto): Bolsin {
-    const comisionOrigen = new ComisionMedica(
-      registro.comisionMedicaOrigen.id,
-      registro.comisionMedicaOrigen.nombre,
-    );
-    const comisionDestino = new ComisionMedica(
-      registro.comisionMedicaDestino.id,
-      registro.comisionMedicaDestino.nombre,
-    );
-    const remitos = registro.remitos.map((remito) => {
-      const detalles = remito.detalles.map((detalle) => {
-        const doc = detalle.documentacion;
-        const tipo = new TipoDocumentacion(
-          doc.tipoDocumentacion.id,
-          doc.tipoDocumentacion.nombre,
-        );
-        const cambios = doc.cambiosEstado.map(
-          (cambio) =>
-            new CambioEstadoDocumentacion(
-              cambio.id,
-              cambio.fechaHoraInicio,
-              cambio.fechaHoraFin,
-              this.mapearEstado(cambio.estado),
-              this.mapearEmpleado(cambio.empleado),
-            ),
-        );
-        // El origen de la documentación se asocia con la comisión de origen del bolsín
-        return new DetalleRemito(
-          detalle.id,
-          new Documentacion(
-            doc.id,
-            doc.asunto,
-            tipo,
-            cambios,
-            comisionOrigen,
-          ),
-        );
-      });
-      return new Remito(
-        remito.id,
-        remito.Numero,
-        this.mapearEstado(remito.estado),
-        detalles,
-        comisionOrigen,
-        comisionDestino,
-      );
-    });
-    const cambios = registro.cambiosEstado.map(
-      (cambio) =>
-        new CambioEstadoBolsin(
-          cambio.id,
-          cambio.fechaHoraInicio,
-          cambio.fechaHoraFin,
-          this.mapearEstado(cambio.estado),
-          this.mapearEmpleado(cambio.empleado),
-        ),
-    );
-
-    return new Bolsin(
-      registro.id,
-      registro.numeroPrecinto,
-      comisionOrigen,
-      comisionDestino,
-      remitos,
-      cambios,
-
-    );
   }
 }

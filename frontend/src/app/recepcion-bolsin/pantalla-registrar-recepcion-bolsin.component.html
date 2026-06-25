@@ -1,14 +1,14 @@
 <main class="page-shell">
   <section class="header-band" aria-labelledby="titulo-recepcion">
     <h1 id="titulo-recepcion">Registrar recepcion de bolsin</h1>
-    <p>Usuario logueado: {{ usuarioLogueadoTexto }}</p>
+    <p>Usuario logueado: {{ usuarioLogeado }}</p>
   </section>
 
   <section class="step-card">
     <span class="step-number">1</span>
     <div>
       <h2>Comision medica del usuario</h2>
-      <p class="strong">{{ inicio?.comisionMedica?.nombre || 'Comision medica' }}</p>
+      <p class="strong">{{ textComisionMedicaAsociadaUsuarioLogeado }}</p>
     </div>
   </section>
 
@@ -41,7 +41,7 @@
               <td>{{ bolsin.numeroPrecinto }}</td>
               <td>{{ bolsin.comisionMedicaOrigen.nombre }}</td>
               <td class="action-col">
-                <button type="button" class="primary-button" (click)="seleccionarBolsin(bolsin)">
+                <button type="button" class="primary-button" (click)="tomarBolsin(bolsin)">
                   Seleccionar
                 </button>
               </td>
@@ -97,7 +97,7 @@
           type="button"
           class="option-button"
           [class.option-selected]="opcionSeleccionada === opcion.codigo"
-          (click)="seleccionarOpcion(opcion.codigo)"
+          (click)="tomarOpcion(opcion.codigo)"
         >
           {{ opcion.descripcion }}
         </button>
@@ -123,7 +123,7 @@
       <button
         type="button"
         class="primary-button"
-        (click)="confirmarRecepcion()"
+        (click)="tomarConfirmacion()"
         [disabled]="confirmando"
       >
         Confirmar

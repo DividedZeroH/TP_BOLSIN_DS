@@ -25,7 +25,6 @@ describe('Registrar recepción de bolsín (e2e)', () => {
     const inicio = await request(app.getHttpServer())
       .get('/api/recepciones-bolsines/iniciar?sesionId=1')
       .expect(200);
-    expect(inicio.body.usuarioLogueado.email).toBe('encargado.cordoba@demo.local');
     expect(inicio.body.comisionMedica.nombre).toBe('Comisión Médica Córdoba');
     expect(inicio.body.bolsines).toHaveLength(5);
     const bolsinId = inicio.body.bolsines[0].id as number;

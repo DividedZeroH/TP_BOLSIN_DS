@@ -36,22 +36,32 @@ export class Documentacion {
     this.crearCambioEstado(estadoAceptada, empleado, fechaHora);
   }
 
+  // TODO(flujos alternativos fuera de alcance de esta entrega): estos métodos
+  // pertenecen al diagrama de clases pero solo los necesitan los flujos
+  // FALTA_DOCUMENTACION / DOCUMENTACION_NO_CORRESPONDE / REDIRIGIR_OTRA_AREA,
+  // que GestorRegistrarRecepcionBolsin.tomarOpcion() todavía rechaza. Se
+  // implementan junto con el manejador de esa opción en
+  // recepcion-bolsin.modelos.ts.
+
   darDeBaja(): void {
+    throw new Error('No implementado: pertenece al flujo DOCUMENTACION_NO_CORRESPONDE.');
   }
 
   revision(): void {
+    throw new Error('No implementado: pertenece al flujo FALTA_DOCUMENTACION.');
   }
-    
+
   actualizarAsignacionDeRemito(): void {
+    throw new Error('No implementado: pertenece al flujo REDIRIGIR_OTRA_AREA.');
   }
 
   actualizarAsignacionDeBolsin(): void {
+    throw new Error('No implementado: pertenece al flujo REDIRIGIR_OTRA_AREA.');
   }
 
   retirarDeBolsin(): void {
+    throw new Error('No implementado: pertenece al flujo DOCUMENTACION_NO_CORRESPONDE.');
   }
-  
-
 }
 
 

@@ -7,17 +7,3 @@ export const OPCIONES_RECEPCION = [
 ] as const;
 
 export type OpcionRecepcion = (typeof OPCIONES_RECEPCION)[number];
-
-export class ConfirmarRecepcionBolsinDto {
-  sesionId!: number;
-  opcion!: OpcionRecepcion;
-  confirmacion!: boolean;
-}
-
-export interface ResultadoRecepcionBolsin {
-  bolsinId: number;
-  estadoBolsin: 'Recibido';
-  estadoRemitos: 'RecibidoYAceptado';
-  estadoDocumentaciones: 'Aceptada';
-  fechaHora: string;
-}

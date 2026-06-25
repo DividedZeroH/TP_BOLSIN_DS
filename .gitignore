@@ -1,9 +1,35 @@
 node_modules/
-dist/
+frontend/dist/
+backend/dist/
 .angular/
 coverage/
 backend/prisma/*.db
 backend/prisma/*.db-journal
 *.log
-backend/.env
+.env
+.claude/
 
+# OS files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# IDE
+.idea/
+.vscode/
+
+# Vim
+*.swp
+*.swo
+*~
+
+# Build cache
+.eslintcache
+*.tsbuildinfo
+*.bak
+*.tmp
+
+# Logs de npm/yarn
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*

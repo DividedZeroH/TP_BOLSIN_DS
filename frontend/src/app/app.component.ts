@@ -1,9 +1,9 @@
 import { Component } from '@angular/core';
-import { RecepcionBolsinComponent } from './recepcion-bolsin/recepcion-bolsin.component';
+import { PantallaRegistrarRecepcionBolsin } from './recepcion-bolsin/pantalla-registrar-recepcion-bolsin.component';
 
 @Component({
   selector: 'app-root',
-  imports: [RecepcionBolsinComponent],
-  template: '<app-recepcion-bolsin />',
+  imports: [PantallaRegistrarRecepcionBolsin],
+  template: '<app-pantalla-registrar-recepcion-bolsin />',
 })
 export class AppComponent {}

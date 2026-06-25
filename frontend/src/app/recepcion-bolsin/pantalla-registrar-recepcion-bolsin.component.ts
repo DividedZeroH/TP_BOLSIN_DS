@@ -21,13 +21,20 @@ interface ModalRecepcion {
   mensaje: string;
 }
 
+/**
+ * Clase Boundary del análisis (PantallaRegistrarRecepcionBolsin). Los nombres
+ * de método siguen el diagrama de clases; las decisiones que el diagrama deja
+ * implícitas en bindings de template (mostrar.../pedirConfirmacion) quedan
+ * como métodos propios aunque su cuerpo solo actualice el estado que el
+ * template lee con *ngIf/interpolación.
+ */
 @Component({
-  selector: 'app-recepcion-bolsin',
+  selector: 'app-pantalla-registrar-recepcion-bolsin',
   imports: [CommonModule],
-  templateUrl: './recepcion-bolsin.component.html',
-  styleUrl: './recepcion-bolsin.component.css',
+  templateUrl: './pantalla-registrar-recepcion-bolsin.component.html',
+  styleUrl: './pantalla-registrar-recepcion-bolsin.component.css',
 })
-export class RecepcionBolsinComponent implements OnInit {
+export class PantallaRegistrarRecepcionBolsin implements OnInit {
   readonly sesionId = 1;
   readonly opcionesRecepcion: OpcionRecepcionVista[] = [
     {
@@ -52,6 +59,7 @@ export class RecepcionBolsinComponent implements OnInit {
 
   inicio?: InicioRecepcion;
   bolsines: BolsinVista[] = [];
+  textComisionMedicaAsociadaUsuarioLogeado = 'Comision medica';
   bolsinSeleccionado?: BolsinVista;
   detalle?: DetalleBolsinVista;
   opcionSeleccionada?: CodigoOpcionRecepcion;
@@ -65,10 +73,10 @@ export class RecepcionBolsinComponent implements OnInit {
   constructor(private readonly recepcionService: RecepcionBolsinService) {}
 
   ngOnInit(): void {
-    this.cargarInicio();
+    this.registrarRecepcionBolsin();
   }
 
-  get usuarioLogueadoTexto(): string {
+  get usuarioLogeado(): string {
     const usuario = this.inicio?.usuarioLogueado;
     if (usuario?.email) {
       return usuario.email;
@@ -89,13 +97,20 @@ export class RecepcionBolsinComponent implements OnInit {
     );
   }
 
-  cargarInicio(): void {
+  /** Punto de entrada del CU (disparado al abrir la pantalla). */
+  registrarRecepcionBolsin(): void {
+    this.abrirVentana();
+  }
+
+  /** Pide al gestor el usuario logueado, su comisión y los bolsines enviados. */
+  abrirVentana(): void {
     this.cargando = true;
     this.mensajeCarga = undefined;
     this.recepcionService.iniciar(this.sesionId).subscribe({
       next: (inicio) => {
         this.inicio = inicio;
-        this.bolsines = inicio.bolsines ?? [];
+        this.mostrarComisionMedicaUsuario();
+        this.mostrarDatosBolsinesParaSeleccion();
         this.cargando = false;
       },
       error: () => {
@@ -105,14 +120,24 @@ export class RecepcionBolsinComponent implements OnInit {
     });
   }
 
-  seleccionarBolsin(bolsin: BolsinVista): void {
+  mostrarComisionMedicaUsuario(): void {
+    this.textComisionMedicaAsociadaUsuarioLogeado =
+      this.inicio?.comisionMedica?.nombre ?? 'Comision medica';
+  }
+
+  mostrarDatosBolsinesParaSeleccion(): void {
+    this.bolsines = this.inicio?.bolsines ?? [];
+  }
+
+  tomarBolsin(bolsin: BolsinVista): void {
     this.bolsinSeleccionado = bolsin;
     this.detalle = undefined;
     this.opcionSeleccionada = undefined;
     this.cargandoDetalle = true;
     this.recepcionService.tomarBolsin(this.sesionId, bolsin.id).subscribe({
       next: (detalle) => {
-        this.detalle = detalle;
+        this.mostraDocumentacionBolsin(detalle);
+        this.mostrarOpcionesRecepcionParaSeleccion();
         this.cargandoDetalle = false;
       },
       error: () => {
@@ -126,15 +151,28 @@ export class RecepcionBolsinComponent implements OnInit {
     });
   }
 
-  seleccionarOpcion(codigo: CodigoOpcionRecepcion): void {
-    this.opcionSeleccionada = codigo;
+  mostraDocumentacionBolsin(detalle: DetalleBolsinVista): void {
+    this.detalle = detalle;
   }
+
+  /** La lista ya está cargada de forma estática; el paso solo limpia la selección previa. */
+  mostrarOpcionesRecepcionParaSeleccion(): void {
+    this.opcionSeleccionada = undefined;
+  }
+
+  tomarOpcion(codigo: CodigoOpcionRecepcion): void {
+    this.opcionSeleccionada = codigo;
+    this.pedirConfirmacion();
+  }
+
+  /** El panel de confirmación se revela solo mediante el *ngIf del template. */
+  pedirConfirmacion(): void {}
 
   cancelarConfirmacion(): void {
     this.opcionSeleccionada = undefined;
   }
 
-  confirmarRecepcion(): void {
+  tomarConfirmacion(): void {
     if (!this.bolsinSeleccionado || !this.opcionSeleccionada) {
       this.modal = {
         tipo: 'error',
@@ -145,7 +183,7 @@ export class RecepcionBolsinComponent implements OnInit {
     }
 
     if (this.opcionSeleccionada !== OPCION_CONTENIDO_IGUAL) {
-      this.registrarExito(this.bolsinSeleccionado.id);
+      this.informarEjecucionExitosa(this.bolsinSeleccionado.id);
       return;
     }
 
@@ -155,11 +193,11 @@ export class RecepcionBolsinComponent implements OnInit {
       .subscribe({
         next: () => {
           this.confirmando = false;
-          this.registrarExito(this.bolsinSeleccionado?.id);
+          this.informarEjecucionExitosa(this.bolsinSeleccionado?.id);
         },
         error: () => {
           this.confirmando = false;
-          this.registrarExito(this.bolsinSeleccionado?.id);
+          this.informarEjecucionExitosa(this.bolsinSeleccionado?.id);
         },
       });
   }
@@ -184,7 +222,7 @@ export class RecepcionBolsinComponent implements OnInit {
     return documentacion.id;
   }
 
-  private registrarExito(bolsinId?: number): void {
+  private informarEjecucionExitosa(bolsinId?: number): void {
     this.bolsinRegistradoId = bolsinId;
     this.modal = {
       tipo: 'exito',
