@@ -1,79 +1,52 @@
 import {
   BadRequestException,
+  Inject,
   Injectable,
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
-import { PrismaService } from '../prisma/prisma.service';
 import { Estado } from '../dominio/estado';
 import { Empleado } from '../dominio/empleado';
 import { ComisionMedica } from '../dominio/comisionMedica';
 import { Remito } from '../dominio/remito';
 import { Documentacion } from '../dominio/documentacion';
 import { Bolsin } from '../dominio/bolsin';
-import { CambioEstadoBolsin } from '../dominio/cambioEstadoBolsin';
-import { CambioEstadoDocumentacion } from '../dominio/cambioEstadoDocumentacion';
-import { DetalleRemito } from '../dominio/detalleRemito';
-import { TipoDocumentacion } from '../dominio/tipoDocumentacion';
-import { Sesion } from '../dominio/sesion';
-import { Usuario } from '../dominio/usuario';
+import { BolsinMapper } from './bolsin.mapper';
+import {
+  BOLSIN_REPOSITORY,
+  IBolsinRepository,
+} from './repositorios/bolsin.repository';
+import {
+  ESTADO_REPOSITORY,
+  IEstadoRepository,
+} from './repositorios/estado.repository';
+import {
+  ISesionRepository,
+  SESION_REPOSITORY,
+} from './repositorios/sesion.repository';
+import { MANEJADORES_OPCION_RECEPCION } from './opcion-recepcion.handlers';
 import {
   OPCION_CONTENIDO_IGUAL,
   OpcionRecepcion,
   ResultadoRecepcionBolsin,
 } from './recepcion-bolsin.modelos';
 
-
-/**
- * Incluye todas las relaciones que forman el agregado Bolsin. La constante se
- * comparte entre las consultas y el tipo generado por Prisma para impedir que
- * una modificación de la consulta deje al mapeo desactualizado.
- */
-const bolsinCompletoInclude = Prisma.validator<Prisma.BolsinInclude>()({
-  comisionMedicaOrigen: true,
-  comisionMedicaDestino: true,
-  cambiosEstado: {
-    include: { estado: true, empleado: { include: { comisionMedica: true } } },
-  },
-  remitos: {
-    include: {
-      estado: true,
-      detalles: {
-        include: {
-          documentacion: {
-            include: {
-              tipoDocumentacion: true,
-              cambiosEstado: {
-                include: {
-                  estado: true,
-                  empleado: { include: { comisionMedica: true } },
-                },
-              },
-            },
-          },
-        },
-      },
-    },
-  },
-});
-
-type BolsinCompleto = Prisma.BolsinGetPayload<{
-  include: typeof bolsinCompletoInclude;
-}>;
-type EmpleadoConComision = Prisma.EmpleadoGetPayload<{
-  include: { comisionMedica: true };
-}>;
-
 /**
  * Clase Control/Gestor del análisis. Coordina exactamente el flujo normal y
- * mantiene las decisiones de negocio fuera del controlador HTTP.
+ * mantiene las decisiones de negocio fuera del controlador HTTP. El acceso a
+ * datos queda detrás de interfaces de Repository (DIP); este gestor no
+ * conoce Prisma ni SQLite.
  */
 @Injectable()
 export class GestorRegistrarRecepcionBolsin {
   private readonly logger = new Logger(GestorRegistrarRecepcionBolsin.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    @Inject(BOLSIN_REPOSITORY) private readonly bolsinRepository: IBolsinRepository,
+    @Inject(ESTADO_REPOSITORY) private readonly estadoRepository: IEstadoRepository,
+    @Inject(SESION_REPOSITORY) private readonly sesionRepository: ISesionRepository,
+    private readonly mapper: BolsinMapper,
+  ) {}
 
   /** Inicia el CU obteniendo usuario, comisión y bolsines enviados a destino. */
   async nuevaRecepcionBolsin(sesionId: number) {
@@ -91,7 +64,6 @@ export class GestorRegistrarRecepcionBolsin {
       bolsines: bolsines.map((bolsin) => ({
         id: bolsin.id,
         numeroPrecinto: bolsin.numeroPrecinto,
-
         comisionMedicaOrigen: bolsin.comisionMedicaOrigen,
       })),
     };
@@ -108,38 +80,16 @@ export class GestorRegistrarRecepcionBolsin {
    * misma indicada en la secuencia.
    */
   async buscarUsuarioLogueado(sesionId: number): Promise<Empleado> {
-    const registro = await this.prisma.sesion.findUnique({
-      where: { id: sesionId },
-      include: {
-        usuario: {
-          include: { empleado: { include: { comisionMedica: true } } },
-        },
-      },
-    });
+    const registro = await this.sesionRepository.buscarConUsuarioYEmpleado(sesionId);
     if (!registro) {
       throw new NotFoundException('No se encontró la sesión indicada.');
     }
-
-    const empleado = this.mapearEmpleado(registro.usuario.empleado);
-    const sesion = new Sesion(
-      registro.id,
-      new Usuario(registro.usuario.id, empleado),
-    );
-    return sesion.getUsuarioLogueado().getEmpleado();
+    return this.mapper.mapearEmpleado(registro.usuario.empleado);
   }
 
   /** Consulta únicamente bolsines cuyo cambio actual responde sosEnviado(). */
   async buscarBolsinEnviadoCMUsuario(comisionMedicaId: number) {
-    return this.prisma.bolsin.findMany({
-      where: {
-        comisionMedicaDestinoId: comisionMedicaId,
-        cambiosEstado: {
-          some: { fechaHoraFin: null, estado: { SosEnviado: true } },
-        },
-      },
-      include: { comisionMedicaOrigen: true },
-      orderBy: { fecha: 'asc' },
-    });
+    return this.bolsinRepository.buscarEnviadosPorComisionDestino(comisionMedicaId);
   }
 
   validarComisionMedicaBolsin(
@@ -149,7 +99,6 @@ export class GestorRegistrarRecepcionBolsin {
     return bolsin.obtenerTuCMDestino().id === comisionMedica.id;
   }
 
-  
   buscarPrecintoBolsin(bolsines: Bolsin[]): number[] {
     return bolsines.map((bolsin) => bolsin.getNumeroPrecinto());
   }
@@ -162,15 +111,15 @@ export class GestorRegistrarRecepcionBolsin {
   async tomarBolsin(sesionId: number, bolsinId: number) {
     const empleado = await this.buscarUsuarioLogueado(sesionId);
     const comision = this.buscarComisionMedicaUsuario(empleado);
-    const registro = await this.prisma.bolsin.findFirst({
-      where: { id: bolsinId, comisionMedicaDestinoId: comision.id },
-      include: bolsinCompletoInclude,
-    });
+    const registro = await this.bolsinRepository.buscarCompletoPorIdYDestino(
+      bolsinId,
+      comision.id,
+    );
     if (!registro) {
       throw new NotFoundException('No se encontró el bolsín seleccionado.');
     }
 
-    const bolsin = this.mapearBolsin(registro);
+    const bolsin = this.mapper.mapearBolsin(registro);
     if (!this.validarComisionMedicaBolsin(bolsin, comision) || !bolsin.sosEnviado()) {
       throw new NotFoundException('El bolsín no está disponible para esta comisión.');
     }
@@ -207,15 +156,17 @@ export class GestorRegistrarRecepcionBolsin {
 
   /** Solo acepta la primera opción porque los flujos alternativos están fuera. */
   tomarOpcion(opcion: OpcionRecepcion): OpcionRecepcion {
-    if (opcion !== OPCION_CONTENIDO_IGUAL) {
+    const manejador = MANEJADORES_OPCION_RECEPCION[opcion];
+    if (!manejador?.implementado) {
       throw new BadRequestException('La opción no pertenece al flujo normal implementado.');
     }
-    return opcion;
+    return manejador.opcion;
   }
 
   /**
-   * Confirma el CU. $transaction garantiza que ninguna entidad quede en un
-   * estado parcial si una escritura inesperada falla.
+   * Confirma el CU. La transacción la abre el repository (`ejecutarEnTransaccion`)
+   * para que ninguna entidad quede en un estado parcial si una escritura
+   * inesperada falla.
    */
   async tomarConfirmacion(
     sesionId: number,
@@ -228,28 +179,19 @@ export class GestorRegistrarRecepcionBolsin {
     const empleado = await this.buscarUsuarioLogueado(sesionId);
     const fechaHora = this.getFechaHoraActual();
 
-    await this.prisma.$transaction(async (tx) => {
-      const registro = await tx.bolsin.findUnique({
-        where: { id: bolsinId },
-        include: bolsinCompletoInclude,
-      });
+    await this.bolsinRepository.ejecutarEnTransaccion(async (tx) => {
+      const registro = await this.bolsinRepository.buscarCompletoPorIdEnTx(tx, bolsinId);
       if (!registro) {
         throw new NotFoundException('No se encontró el bolsín seleccionado.');
       }
-      const bolsin = this.mapearBolsin(registro);
+      const bolsin = this.mapper.mapearBolsin(registro);
       if (!this.validarComisionMedicaBolsin(bolsin, empleado.getComisionMedica())) {
         throw new NotFoundException('El bolsín no pertenece a la comisión del usuario.');
       }
 
       const estadoRecibido = await this.buscarEstadoRecibidoBolsin(tx);
       const estadoRemito = await this.buscarEstadoRecibidoYAceptado(tx);
-      const registroAceptada = await tx.estado.findUnique({
-        where: { Nombre_Ambito: { Nombre: 'Aceptada', Ambito: 'DOCUMENTACION' } },
-      });
-      if (!registroAceptada) {
-        throw new NotFoundException('No se configuró el estado Aceptada.');
-      }
-      const estadoAceptada = this.mapearEstado(registroAceptada);
+      const estadoAceptada = await this.buscarEstadoAceptadaDocumentacion(tx);
 
       await this.registrarCambioEstadoBolsin(
         tx,
@@ -274,14 +216,12 @@ export class GestorRegistrarRecepcionBolsin {
     return this.finDelCU(bolsinId, fechaHora);
   }
 
-  async buscarEstadoRecibidoBolsin(tx: Prisma.TransactionClient): Promise<Estado> {
-    const registro = await tx.estado.findFirst({
-      where: { Nombre: 'Recibido', Ambito: 'BOLSIN', SosAmbitoBolsin: true },
-    });
+  async buscarEstadoRecibidoBolsin(tx: unknown): Promise<Estado> {
+    const registro = await this.estadoRepository.buscarEstadoBolsinPorNombreEnTx(tx, 'Recibido');
     if (!registro) {
       throw new NotFoundException('No se configuró el estado Recibido del bolsín.');
     }
-    const estado = this.mapearEstado(registro);
+    const estado = this.mapper.mapearEstado(registro);
     if (!estado.sosAmbitoBolsin() || !estado.sosRecibido()) {
       throw new NotFoundException('El estado Recibido no pertenece al ámbito Bolsin.');
     }
@@ -293,7 +233,7 @@ export class GestorRegistrarRecepcionBolsin {
   }
 
   async registrarCambioEstadoBolsin(
-    tx: Prisma.TransactionClient,
+    tx: unknown,
     bolsin: Bolsin,
     estado: Estado,
     empleado: Empleado,
@@ -301,52 +241,54 @@ export class GestorRegistrarRecepcionBolsin {
   ): Promise<void> {
     // Primero se aplica la regla del dominio y luego se refleja en SQLite.
     bolsin.registrarCambioEstadoBolsin(estado, empleado, fechaHora);
-    await tx.cambioEstadoBolsin.updateMany({
-      where: { bolsinId: bolsin.id, fechaHoraFin: null },
-      data: { fechaHoraFin: fechaHora },
-    });
-    await tx.cambioEstadoBolsin.create({
-      data: {
-        bolsinId: bolsin.id,
-        estadoId: estado.id,
-        empleadoId: empleado.id,
-        fechaHoraInicio: fechaHora,
-      },
-    });
+    await this.bolsinRepository.registrarCambioEstadoBolsin(
+      tx,
+      bolsin.id,
+      estado.id,
+      empleado.id,
+      fechaHora,
+    );
   }
 
-  async buscarEstadoRecibidoYAceptado(
-    tx: Prisma.TransactionClient,
-  ): Promise<Estado> {
-    const registro = await tx.estado.findUnique({
-      where: {
-        Nombre_Ambito: { Nombre: 'RecibidoYAceptado', Ambito: 'REMITO' },
-      },
-    });
+  async buscarEstadoRecibidoYAceptado(tx: unknown): Promise<Estado> {
+    const registro = await this.estadoRepository.buscarPorNombreYAmbitoEnTx(
+      tx,
+      'RecibidoYAceptado',
+      'REMITO',
+    );
     if (!registro) {
       throw new NotFoundException('No se configuró RecibidoYAceptado para remitos.');
     }
-    const estado = this.mapearEstado(registro);
+    const estado = this.mapper.mapearEstado(registro);
     if (!estado.sosAmbitoRemito() || !estado.sosRecibidoYAceptado()) {
       throw new NotFoundException('El estado no corresponde a remitos recibidos.');
     }
     return estado;
   }
 
+  async buscarEstadoAceptadaDocumentacion(tx: unknown): Promise<Estado> {
+    const registro = await this.estadoRepository.buscarPorNombreYAmbitoEnTx(
+      tx,
+      'Aceptada',
+      'DOCUMENTACION',
+    );
+    if (!registro) {
+      throw new NotFoundException('No se configuró el estado Aceptada.');
+    }
+    return this.mapper.mapearEstado(registro);
+  }
+
   async actualizarEstadoRemito(
-    tx: Prisma.TransactionClient,
+    tx: unknown,
     bolsin: Bolsin,
     estado: Estado,
   ): Promise<void> {
     bolsin.actualizarEstadoRemito(estado);
-    await tx.remito.updateMany({
-      where: { bolsinId: bolsin.id },
-      data: { estadoId: estado.id },
-    });
+    await this.bolsinRepository.actualizarEstadoRemitos(tx, bolsin.id, estado.id);
   }
 
   async actualizarDocumentacion(
-    tx: Prisma.TransactionClient,
+    tx: unknown,
     bolsin: Bolsin,
     estado: Estado,
     empleado: Empleado,
@@ -355,18 +297,13 @@ export class GestorRegistrarRecepcionBolsin {
     bolsin.actualizarDocumentacion(estado, empleado, fechaHora);
     const documentaciones = bolsin.buscarDocumentacionBolsin();
     for (const documentacion of documentaciones) {
-      await tx.cambioEstadoDocumentacion.updateMany({
-        where: { documentacionId: documentacion.id, fechaHoraFin: null },
-        data: { fechaHoraFin: fechaHora },
-      });
-      await tx.cambioEstadoDocumentacion.create({
-        data: {
-          documentacionId: documentacion.id,
-          estadoId: estado.id,
-          empleadoId: empleado.id,
-          fechaHoraInicio: fechaHora,
-        },
-      });
+      await this.bolsinRepository.registrarCambioEstadoDocumentacion(
+        tx,
+        documentacion.id,
+        estado.id,
+        empleado.id,
+        fechaHora,
+      );
     }
   }
 
@@ -383,102 +320,5 @@ export class GestorRegistrarRecepcionBolsin {
       estadoDocumentaciones: 'Aceptada',
       fechaHora: fechaHora.toISOString(),
     };
-  }
-
-  private mapearEstado(registro: {
-    id: number;
-    Nombre: string;
-    Ambito: string;
-    SosEnviado: boolean;
-    SosAmbitoBolsin: boolean;
-  }): Estado {
-    return new Estado(
-      registro.id,
-      registro.Nombre,
-      registro.Ambito,
- 
-    );
-  }
-
-  private mapearEmpleado(registro: EmpleadoConComision): Empleado {
-    return new Empleado(
-      registro.id,
-      new ComisionMedica(
-        registro.comisionMedica.id,
-        registro.comisionMedica.nombre,
-      ),
-      registro.apellido,
-      registro.email,
-    );
-  }
-
-  /** Convierte la estructura persistente en las clases puras del dominio. */
-  private mapearBolsin(registro: BolsinCompleto): Bolsin {
-    const comisionOrigen = new ComisionMedica(
-      registro.comisionMedicaOrigen.id,
-      registro.comisionMedicaOrigen.nombre,
-    );
-    const comisionDestino = new ComisionMedica(
-      registro.comisionMedicaDestino.id,
-      registro.comisionMedicaDestino.nombre,
-    );
-    const remitos = registro.remitos.map((remito) => {
-      const detalles = remito.detalles.map((detalle) => {
-        const doc = detalle.documentacion;
-        const tipo = new TipoDocumentacion(
-          doc.tipoDocumentacion.id,
-          doc.tipoDocumentacion.nombre,
-        );
-        const cambios = doc.cambiosEstado.map(
-          (cambio) =>
-            new CambioEstadoDocumentacion(
-              cambio.id,
-              cambio.fechaHoraInicio,
-              cambio.fechaHoraFin,
-              this.mapearEstado(cambio.estado),
-              this.mapearEmpleado(cambio.empleado),
-            ),
-        );
-        // El origen de la documentación se asocia con la comisión de origen del bolsín
-        return new DetalleRemito(
-          detalle.id,
-          new Documentacion(
-            doc.id,
-            doc.asunto,
-            tipo,
-            cambios,
-            comisionOrigen,
-          ),
-        );
-      });
-      return new Remito(
-        remito.id,
-        remito.Numero,
-        this.mapearEstado(remito.estado),
-        detalles,
-        comisionOrigen,
-        comisionDestino,
-      );
-    });
-    const cambios = registro.cambiosEstado.map(
-      (cambio) =>
-        new CambioEstadoBolsin(
-          cambio.id,
-          cambio.fechaHoraInicio,
-          cambio.fechaHoraFin,
-          this.mapearEstado(cambio.estado),
-          this.mapearEmpleado(cambio.empleado),
-        ),
-    );
-
-    return new Bolsin(
-      registro.id,
-      registro.numeroPrecinto,
-      comisionOrigen,
-      comisionDestino,
-      remitos,
-      cambios,
-
-    );
   }
 }
