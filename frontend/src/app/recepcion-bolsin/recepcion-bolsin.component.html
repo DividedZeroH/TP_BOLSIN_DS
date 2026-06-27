@@ -15,8 +15,7 @@
   <section class="step-card">
     <span class="step-number">2</span>
     <div class="step-content">
-      <h2>Seleccionar bolsin enviado</h2>
-      <p class="muted">Se muestran unicamente los destinados a la comision del usuario.</p>
+      <h2>Seleccionar bolsin para recepcion</h2>
 
       <p *ngIf="cargando" class="state-message">Cargando bolsines...</p>
       <p *ngIf="mensajeCarga" class="state-message error-text">{{ mensajeCarga }}</p>
@@ -56,7 +55,7 @@
     <span class="step-number">3</span>
     <div class="step-content">
       <h2>Documentacion registrada</h2>
-      <p class="muted">Precinto {{ bolsinSeleccionado.numeroPrecinto }}</p>
+      <p class="muted">Bolsin con numero de precinto {{ bolsinSeleccionado.numeroPrecinto }}</p>
 
       <p *ngIf="cargandoDetalle" class="state-message">Cargando documentacion...</p>
 
