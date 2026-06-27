@@ -1,0 +1,104 @@
+.panel-shell {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 24px 28px 48px;
+}
+
+.panel-header {
+  min-height: 132px;
+  display: flex;
+  align-items: center;
+  padding: 34px 36px;
+  border-radius: 16px;
+  background: linear-gradient(120deg, #1e4379 0%, #077b79 100%);
+  color: #fff;
+  box-shadow: 0 18px 42px rgba(18, 50, 83, 0.16);
+}
+
+.panel-header h1 {
+  margin: 0 0 12px;
+  font-size: 42px;
+  line-height: 1.08;
+  letter-spacing: 0;
+}
+
+.panel-header p,
+.section-heading p {
+  margin: 0;
+}
+
+.acciones-panel {
+  margin-top: 20px;
+  padding: 24px;
+  border: 1px solid #d8e1ec;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.section-heading {
+  display: grid;
+  gap: 6px;
+}
+
+.section-heading h2 {
+  margin: 0;
+  font-size: 22px;
+  letter-spacing: 0;
+}
+
+.section-heading p,
+.accion-card span {
+  color: #566782;
+}
+
+.acciones-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+  margin-top: 22px;
+}
+
+.accion-card {
+  display: grid;
+  gap: 10px;
+  min-height: 150px;
+  padding: 20px;
+  border: 1px solid #d8e1ec;
+  border-radius: 8px;
+  background: #f7fafc;
+  color: #001a41;
+  text-decoration: none;
+}
+
+.accion-card:hover,
+.accion-card:focus-visible {
+  border-color: #077b79;
+  outline: 0;
+  box-shadow: 0 12px 28px rgba(18, 50, 83, 0.14);
+}
+
+.accion-card strong {
+  font-size: 22px;
+  letter-spacing: 0;
+}
+
+.accion-kicker {
+  color: #077b79;
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+@media (max-width: 680px) {
+  .panel-shell {
+    padding: 16px;
+  }
+
+  .panel-header {
+    padding: 26px 22px;
+  }
+
+  .panel-header h1 {
+    font-size: 34px;
+  }
+}

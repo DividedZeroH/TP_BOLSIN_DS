@@ -42,7 +42,7 @@
               <td>{{ bolsin.comisionMedicaOrigen.nombre }}</td>
               <td class="action-col">
                 <button type="button" class="primary-button" (click)="seleccionarBolsin(bolsin)">
-                  Seleccionar
+                  {{ bolsinSeleccionado?.id === bolsin.id ? 'Seleccionado' : 'Seleccionar' }}
                 </button>
               </td>
             </tr>
@@ -105,21 +105,15 @@
     </div>
   </section>
 
-  <section *ngIf="bolsinSeleccionado" class="confirm-panel">
-    <h2>Confirmar recepcion</h2>
-    <p>Se registrara la situacion seleccionada para el bolsin.</p>
-    <p *ngIf="opcionSeleccionada">
-      Opcion seleccionada: <strong>{{ opcionSeleccionadaTexto }}</strong>
-    </p>
+  <section *ngIf="bolsinSeleccionado && opcionSeleccionada" class="confirm-panel">
+    <div class="confirm-copy">
+      <h2>Confirmar recepcion</h2>
+      <p>Se registrara la situacion seleccionada para el bolsin.</p>
+      <p>
+        Opcion seleccionada: <strong>{{ opcionSeleccionadaTexto }}</strong>
+      </p>
+    </div>
     <div class="confirm-actions">
-      <button
-        type="button"
-        class="secondary-button"
-        (click)="cancelarConfirmacion()"
-        [disabled]="confirmando"
-      >
-        Cancelar
-      </button>
       <button
         type="button"
         class="primary-button"
@@ -129,6 +123,12 @@
         Confirmar
       </button>
     </div>
+  </section>
+
+  <section class="case-cancel-panel">
+    <button type="button" class="secondary-button case-cancel-button" (click)="cancelarCasoUso()">
+      Cancelar
+    </button>
   </section>
 </main>
 
@@ -142,8 +142,18 @@
   >
     <h2 id="modal-title">{{ modal.titulo }}</h2>
     <p>{{ modal.mensaje }}</p>
-    <div class="modal-actions">
-      <button type="button" class="primary-button" (click)="cerrarModal()">Aceptar</button>
+    <div *ngIf="modal.tipo !== 'cancelacion'" class="modal-actions">
+      <button type="button" class="primary-button" (click)="cerrarModal()">
+        Aceptar
+      </button>
+    </div>
+    <div *ngIf="modal.tipo === 'cancelacion'" class="modal-actions modal-actions-split">
+      <button type="button" class="secondary-button" (click)="rechazarCancelacion()">
+        Rechazar
+      </button>
+      <button type="button" class="primary-button" (click)="confirmarCancelacion()">
+        Confirmar
+      </button>
     </div>
   </section>
 </div>

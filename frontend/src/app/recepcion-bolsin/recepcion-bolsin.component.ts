@@ -1,5 +1,6 @@
 import { CommonModule } from '@angular/common';
 import { Component, OnInit } from '@angular/core';
+import { Router } from '@angular/router';
 import {
   BolsinVista,
   CodigoOpcionRecepcion,
@@ -13,7 +14,7 @@ import {
 } from './recepcion-bolsin.modelos';
 import { RecepcionBolsinService } from './recepcion-bolsin.service';
 
-type TipoModal = 'exito' | 'error';
+type TipoModal = 'exito' | 'error' | 'cancelacion';
 
 interface ModalRecepcion {
   tipo: TipoModal;
@@ -62,7 +63,10 @@ export class RecepcionBolsinComponent implements OnInit {
   mensajeCarga?: string;
   private bolsinRegistradoId?: number;
 
-  constructor(private readonly recepcionService: RecepcionBolsinService) {}
+  constructor(
+    private readonly recepcionService: RecepcionBolsinService,
+    private readonly router: Router,
+  ) {}
 
   ngOnInit(): void {
     this.cargarInicio();
@@ -131,7 +135,23 @@ export class RecepcionBolsinComponent implements OnInit {
   }
 
   cancelarConfirmacion(): void {
-    this.opcionSeleccionada = undefined;
+    this.cancelarCasoUso();
+  }
+
+  cancelarCasoUso(): void {
+    this.modal = {
+      tipo: 'cancelacion',
+      titulo: 'Cancelar caso de uso',
+      mensaje: 'Desea confirmar la cancelacion del caso de uso?',
+    };
+  }
+
+  confirmarCancelacion(): void {
+    void this.router.navigate(['/panel']);
+  }
+
+  rechazarCancelacion(): void {
+    this.modal = undefined;
   }
 
   confirmarRecepcion(): void {
@@ -165,9 +185,9 @@ export class RecepcionBolsinComponent implements OnInit {
   }
 
   cerrarModal(): void {
-    const eraExito = this.modal?.tipo === 'exito';
+    const tipoModal = this.modal?.tipo;
     this.modal = undefined;
-    if (eraExito) {
+    if (tipoModal === 'exito') {
       this.limpiarSeleccionRegistrada();
     }
   }

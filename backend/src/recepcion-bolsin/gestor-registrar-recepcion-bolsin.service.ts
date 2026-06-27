@@ -84,7 +84,8 @@ export class GestorRegistrarRecepcionBolsin {
     return {
       usuarioLogueado: {
         id: empleado.id,
-    
+        apellido: empleado.apellido,
+        email: empleado.email,
       },
       comisionMedica: { id: comision.id, nombre: comision.getNombre() },
       bolsines: bolsines.map((bolsin) => ({
@@ -402,11 +403,12 @@ export class GestorRegistrarRecepcionBolsin {
   private mapearEmpleado(registro: EmpleadoConComision): Empleado {
     return new Empleado(
       registro.id,
-
       new ComisionMedica(
         registro.comisionMedica.id,
         registro.comisionMedica.nombre,
       ),
+      registro.apellido,
+      registro.email,
     );
   }
 

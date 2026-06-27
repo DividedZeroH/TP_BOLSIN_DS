@@ -1,9 +1,9 @@
 import { Component } from '@angular/core';
-import { RecepcionBolsinComponent } from './recepcion-bolsin/recepcion-bolsin.component';
+import { RouterOutlet } from '@angular/router';
 
 @Component({
   selector: 'app-root',
-  imports: [RecepcionBolsinComponent],
-  template: '<app-recepcion-bolsin />',
+  imports: [RouterOutlet],
+  template: '<router-outlet />',
 })
 export class AppComponent {}

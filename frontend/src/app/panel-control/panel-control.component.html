@@ -1,0 +1,21 @@
+<main class="panel-shell">
+  <section class="panel-header" aria-labelledby="titulo-panel">
+    <div>
+      <h1 id="titulo-panel">Panel de control</h1>
+      <p>Usuario logueado: {{ usuario }}</p>
+    </div>
+  </section>
+
+  <section class="acciones-panel" aria-labelledby="titulo-acciones">
+    <div class="section-heading">
+      <h2 id="titulo-acciones">Casos de uso disponibles</h2>
+    </div>
+
+    <div class="acciones-grid">
+      <a class="accion-card" routerLink="/recepcion-bolsin">
+        <strong>Registrar recepcion bolsin</strong>
+        <span>Iniciar registro de recepcion de un bolsin enviado.</span>
+      </a>
+    </div>
+  </section>
+</main>

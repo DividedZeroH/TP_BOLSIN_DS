@@ -8,6 +8,8 @@
   ],
   "scripts": {
     "dev": "concurrently -n backend,frontend -c blue,green \"npm run start:dev --workspace backend\" \"npm run start --workspace frontend\"",
+    "dev:backend": "npm run start:dev --workspace backend",
+    "dev:frontend": "npm run start --workspace frontend",
     "build": "npm run build --workspace backend && npm run build --workspace frontend",
     "test": "npm run test --workspace backend && npm run test --workspace frontend -- --watch=false",
     "db:migrate": "npm run prisma:migrate --workspace backend",

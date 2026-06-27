@@ -1,4 +1,5 @@
 import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
+import { Router } from '@angular/router';
 import { of, throwError } from 'rxjs';
 import { RecepcionBolsinComponent } from './recepcion-bolsin.component';
 import {
@@ -13,6 +14,7 @@ describe('RecepcionBolsinComponent', () => {
   let fixture: ComponentFixture<RecepcionBolsinComponent>;
   let component: RecepcionBolsinComponent;
   let service: jasmine.SpyObj<RecepcionBolsinService>;
+  let router: jasmine.SpyObj<Router>;
 
   const inicio: InicioRecepcion = {
     usuarioLogueado: { id: 1 },
@@ -53,10 +55,15 @@ describe('RecepcionBolsinComponent', () => {
         fechaHora: '2026-06-18T13:00:00.000Z',
       }),
     );
+    router = jasmine.createSpyObj<Router>('Router', ['navigate']);
+    router.navigate.and.returnValue(Promise.resolve(true));
 
     await TestBed.configureTestingModule({
       imports: [RecepcionBolsinComponent],
-      providers: [{ provide: RecepcionBolsinService, useValue: service }],
+      providers: [
+        { provide: RecepcionBolsinService, useValue: service },
+        { provide: Router, useValue: router },
+      ],
     }).compileComponents();
 
     fixture = TestBed.createComponent(RecepcionBolsinComponent);
@@ -92,6 +99,7 @@ describe('RecepcionBolsinComponent', () => {
     const texto = fixture.nativeElement.textContent as string;
     expect(texto).toContain('Remito 3');
     expect(texto).toContain('Expediente medico');
+    expect(texto).toContain('Seleccionado');
     expect(texto).not.toContain('ID 16');
     expect(texto).not.toContain('NUMERO');
   }));
@@ -103,12 +111,79 @@ describe('RecepcionBolsinComponent', () => {
     expect(component.opcionSeleccionada).toBe(OPCION_FALTA_DOCUMENTACION);
   });
 
-  it('cancela la confirmacion limpiando la opcion', () => {
-    component.seleccionarOpcion(OPCION_CONTENIDO_IGUAL);
-    component.cancelarConfirmacion();
+  it('mantiene cancelar visible desde el inicio y oculta la confirmacion', () => {
+    const botones = Array.from(
+      fixture.nativeElement.querySelectorAll('button'),
+    ) as HTMLButtonElement[];
+    const botonesCancelar = botones.filter(
+      (boton) => boton.textContent?.trim() === 'Cancelar',
+    );
+    const botonConfirmar = botones.find(
+      (boton) => boton.textContent?.trim() === 'Confirmar',
+    );
 
-    expect(component.opcionSeleccionada).toBeUndefined();
+    expect(fixture.nativeElement.textContent).not.toContain('Confirmar recepcion');
+    expect(botonesCancelar).toHaveSize(1);
+    expect(botonConfirmar).toBeUndefined();
+    expect(fixture.nativeElement.querySelector('.confirm-panel')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.case-cancel-button')).not.toBeNull();
   });
+
+  it('muestra confirmar habilitado cuando se selecciona una situacion', fakeAsync(() => {
+    component.seleccionarBolsin(inicio.bolsines[0]);
+    tick();
+    fixture.detectChanges();
+
+    let botones = Array.from(
+      fixture.nativeElement.querySelectorAll('button'),
+    ) as HTMLButtonElement[];
+    let botonConfirmar = botones.find(
+      (boton) => boton.textContent?.trim() === 'Confirmar',
+    );
+    expect(botonConfirmar).toBeUndefined();
+
+    component.seleccionarOpcion(OPCION_CONTENIDO_IGUAL);
+    fixture.detectChanges();
+
+    botones = Array.from(
+      fixture.nativeElement.querySelectorAll('button'),
+    ) as HTMLButtonElement[];
+    botonConfirmar = botones.find(
+      (boton) => boton.textContent?.trim() === 'Confirmar',
+    );
+
+    expect(fixture.nativeElement.textContent).toContain('Confirmar recepcion');
+    expect(botonConfirmar?.disabled).toBeFalse();
+    expect(fixture.nativeElement.querySelector('.confirm-panel')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('.confirm-panel')?.textContent).not.toContain(
+      'Cancelar',
+    );
+    expect(fixture.nativeElement.querySelector('.case-cancel-button')).not.toBeNull();
+  }));
+
+  it('pide confirmacion antes de cancelar el caso de uso', fakeAsync(() => {
+    component.seleccionarBolsin(inicio.bolsines[0]);
+    tick();
+    component.seleccionarOpcion(OPCION_CONTENIDO_IGUAL);
+    component.cancelarCasoUso();
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain('Cancelar caso de uso');
+    expect(fixture.nativeElement.textContent).toContain(
+      'Desea confirmar la cancelacion del caso de uso?',
+    );
+    expect(router.navigate).not.toHaveBeenCalled();
+
+    component.rechazarCancelacion();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).not.toContain('Cancelar caso de uso');
+    expect(router.navigate).not.toHaveBeenCalled();
+
+    component.cancelarCasoUso();
+    component.confirmarCancelacion();
+
+    expect(router.navigate).toHaveBeenCalledWith(['/panel']);
+  }));
 
   it('confirma el flujo normal y muestra solo mensaje de exito', fakeAsync(() => {
     component.seleccionarBolsin(inicio.bolsines[0]);
