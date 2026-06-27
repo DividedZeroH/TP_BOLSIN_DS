@@ -1,6 +1,6 @@
-# Registrar recepción de bolsín
+# TP_BOLSIN_DS
 
-Implementación web del flujo normal del CU 28, construida a partir del diagrama
+Registrar recepción de bolsín — implementación web del flujo normal del CU 28, construida a partir del diagrama
 de clases, el diagrama de secuencia, la máquina de estados y la plantilla
 funcional suministrados.
 
