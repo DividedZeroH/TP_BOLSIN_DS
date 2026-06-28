@@ -4,10 +4,8 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 
 interface DocumentoSeed {
-  numero: string;
   asunto: string;
   tipo: 'expediente' | 'informe';
-  area: string;
 }
 
 interface RemitoSeed {
@@ -16,10 +14,8 @@ interface RemitoSeed {
 }
 
 interface BolsinSeed {
-  numero: string;
   precinto: number;
   fecha: Date;
-  peso: number;
   origen: string;
   remitos: RemitoSeed[];
 }
@@ -77,22 +73,13 @@ async function main(): Promise<void> {
     await Promise.all([
       prisma.estado.upsert({
         where: { Nombre_Ambito: { Nombre: 'Enviado', Ambito: 'BOLSIN' } },
-        update: { SosEnviado: true, SosAmbitoBolsin: true },
-        create: {
-          Nombre: 'Enviado',
-          Ambito: 'BOLSIN',
-          SosEnviado: true,
-          SosAmbitoBolsin: true,
-        },
+        update: {},
+        create: { Nombre: 'Enviado', Ambito: 'BOLSIN' },
       }),
       prisma.estado.upsert({
         where: { Nombre_Ambito: { Nombre: 'Recibido', Ambito: 'BOLSIN' } },
-        update: { SosAmbitoBolsin: true },
-        create: {
-          Nombre: 'Recibido',
-          Ambito: 'BOLSIN',
-          SosAmbitoBolsin: true,
-        },
+        update: {},
+        create: { Nombre: 'Recibido', Ambito: 'BOLSIN' },
       }),
       prisma.estado.upsert({
         where: { Nombre_Ambito: { Nombre: 'Generado', Ambito: 'REMITO' } },
@@ -126,48 +113,36 @@ async function main(): Promise<void> {
   const tipos = {
     expediente: await prisma.tipoDocumentacion.upsert({
       where: { nombre: 'Expediente médico' },
-      update: {
-        descripcion: 'Documentación médica remitida entre comisiones.',
-      },
+      update: {},
       create: {
         nombre: 'Expediente médico',
-        descripcion: 'Documentación médica remitida entre comisiones.',
       },
     }),
     informe: await prisma.tipoDocumentacion.upsert({
       where: { nombre: 'Informe complementario' },
-      update: {
-        descripcion: 'Informe adjunto para completar la evaluación médica.',
-      },
+      update: {},
       create: {
         nombre: 'Informe complementario',
-        descripcion: 'Informe adjunto para completar la evaluación médica.',
       },
     }),
   };
 
   const escenario: BolsinSeed[] = [
     {
-      numero: 'BOL-2026-001',
       precinto: 1,
       fecha: fechaBase,
-      peso: 2.4,
       origen: comisionesOrigen[0].nombre,
       remitos: [
         {
           numero: 1,
           documentos: [
             {
-              numero: 'DOC-2026-001',
               asunto: 'Evaluación de incapacidad laboral',
               tipo: 'expediente',
-              area: 'Mesa de entradas',
             },
             {
-              numero: 'DOC-2026-002',
               asunto: 'Informe de antecedentes clínicos',
               tipo: 'informe',
-              area: 'Mesa de entradas',
             },
           ],
         },
@@ -175,42 +150,32 @@ async function main(): Promise<void> {
           numero: 2,
           documentos: [
             {
-              numero: 'DOC-2026-003',
               asunto: 'Revisión de dictamen médico',
               tipo: 'expediente',
-              area: 'Auditoría médica',
             },
             {
-              numero: 'DOC-2026-004',
               asunto: 'Estudios complementarios recibidos',
               tipo: 'informe',
-              area: 'Auditoría médica',
             },
           ],
         },
       ],
     },
     {
-      numero: 'BOL-2026-002',
       precinto: 2,
       fecha: new Date('2026-06-18T13:00:00.000Z'),
-      peso: 3.1,
       origen: comisionesOrigen[1].nombre,
       remitos: [
         {
           numero: 3,
           documentos: [
             {
-              numero: 'DOC-2026-005',
               asunto: 'Solicitud de junta médica',
               tipo: 'expediente',
-              area: 'Secretaría médica',
             },
             {
-              numero: 'DOC-2026-006',
               asunto: 'Resumen de historia clínica',
               tipo: 'informe',
-              area: 'Secretaría médica',
             },
           ],
         },
@@ -218,42 +183,32 @@ async function main(): Promise<void> {
           numero: 4,
           documentos: [
             {
-              numero: 'DOC-2026-007',
               asunto: 'Evaluación de reingreso laboral',
               tipo: 'expediente',
-              area: 'Mesa de entradas',
             },
             {
-              numero: 'DOC-2026-008',
               asunto: 'Informe de seguimiento',
               tipo: 'informe',
-              area: 'Mesa de entradas',
             },
           ],
         },
       ],
     },
     {
-      numero: 'BOL-2026-003',
       precinto: 3,
       fecha: new Date('2026-06-18T14:00:00.000Z'),
-      peso: 1.9,
       origen: comisionesOrigen[2].nombre,
       remitos: [
         {
           numero: 5,
           documentos: [
             {
-              numero: 'DOC-2026-009',
               asunto: 'Control de documentación previsional',
               tipo: 'expediente',
-              area: 'Archivo médico',
             },
             {
-              numero: 'DOC-2026-010',
               asunto: 'Informe de estudios laborales',
               tipo: 'informe',
-              area: 'Archivo médico',
             },
           ],
         },
@@ -261,68 +216,52 @@ async function main(): Promise<void> {
           numero: 6,
           documentos: [
             {
-              numero: 'DOC-2026-011',
               asunto: 'Actualización de pericia médica',
               tipo: 'expediente',
-              area: 'Auditoría médica',
             },
             {
-              numero: 'DOC-2026-012',
               asunto: 'Anexo de diagnóstico',
               tipo: 'informe',
-              area: 'Auditoría médica',
             },
           ],
         },
       ],
     },
     {
-      numero: 'BOL-2026-004',
       precinto: 4,
       fecha: new Date('2026-06-18T15:00:00.000Z'),
-      peso: 2.7,
       origen: comisionesOrigen[0].nombre,
       remitos: [
         {
           numero: 7,
           documentos: [
             {
-              numero: 'DOC-2026-013',
               asunto: 'Alta de expediente derivado',
               tipo: 'expediente',
-              area: 'Mesa de entradas',
             },
             {
-              numero: 'DOC-2026-014',
               asunto: 'Informe de derivación',
               tipo: 'informe',
-              area: 'Mesa de entradas',
             },
           ],
         },
       ],
     },
     {
-      numero: 'BOL-2026-005',
       precinto: 5,
       fecha: new Date('2026-06-18T16:00:00.000Z'),
-      peso: 3.5,
       origen: comisionesOrigen[1].nombre,
       remitos: [
         {
           numero: 8,
           documentos: [
             {
-              numero: 'DOC-2026-015',
               asunto: 'Ratificación de incapacidad',
               tipo: 'expediente',
-              area: 'Secretaría médica',
             },
             {
-              numero: 'DOC-2026-016',
               asunto: 'Informe de control final',
               tipo: 'informe',
-              area: 'Secretaría médica',
             },
           ],
         },
@@ -334,6 +273,13 @@ async function main(): Promise<void> {
     comisionesOrigen.map((comision) => [comision.nombre, comision]),
   );
 
+  await prisma.cambioEstadoDocumentacion.deleteMany();
+  await prisma.detalleRemito.deleteMany();
+  await prisma.remito.deleteMany();
+  await prisma.documentacion.deleteMany();
+  await prisma.cambioEstadoBolsin.deleteMany();
+  await prisma.bolsin.deleteMany();
+
   for (const item of escenario) {
     const origen = origenPorNombre.get(item.origen);
     if (!origen) {
@@ -341,19 +287,13 @@ async function main(): Promise<void> {
     }
 
     const bolsin = await prisma.bolsin.upsert({
-      where: { numeroBolsin: item.numero },
+      where: { numeroPrecinto: item.precinto },
       update: {
-        numeroPrecinto: item.precinto,
-        fecha: item.fecha,
-        peso: item.peso,
         comisionMedicaOrigenId: origen.id,
         comisionMedicaDestinoId: cmDestino.id,
       },
       create: {
-        numeroBolsin: item.numero,
         numeroPrecinto: item.precinto,
-        fecha: item.fecha,
-        peso: item.peso,
         comisionMedicaOrigenId: origen.id,
         comisionMedicaDestinoId: cmDestino.id,
       },
@@ -375,13 +315,11 @@ async function main(): Promise<void> {
       const remito = await prisma.remito.upsert({
         where: { Numero: remitoItem.numero },
         update: {
-          fecha: item.fecha,
           bolsinId: bolsin.id,
           estadoId: generado.id,
         },
         create: {
           Numero: remitoItem.numero,
-          fecha: item.fecha,
           bolsinId: bolsin.id,
           estadoId: generado.id,
         },
@@ -389,17 +327,9 @@ async function main(): Promise<void> {
 
       for (const documentoItem of remitoItem.documentos) {
         const tipo = tipos[documentoItem.tipo];
-        const documentacion = await prisma.documentacion.upsert({
-          where: { numero: documentoItem.numero },
-          update: {
+        const documentacion = await prisma.documentacion.create({
+          data: {
             asunto: documentoItem.asunto,
-            fechaPase: item.fecha,
-            tipoDocumentacionId: tipo.id,
-          },
-          create: {
-            numero: documentoItem.numero,
-            asunto: documentoItem.asunto,
-            fechaPase: item.fecha,
             tipoDocumentacionId: tipo.id,
           },
         });
@@ -422,15 +352,9 @@ async function main(): Promise<void> {
             documentacionId: documentacion.id,
           },
         });
-        if (detalle) {
-          await prisma.detalleRemito.update({
-            where: { id: detalle.id },
-            data: { areaCMCDestino: documentoItem.area },
-          });
-        } else {
+        if (!detalle) {
           await prisma.detalleRemito.create({
             data: {
-              areaCMCDestino: documentoItem.area,
               remitoId: remito.id,
               documentacionId: documentacion.id,
             },

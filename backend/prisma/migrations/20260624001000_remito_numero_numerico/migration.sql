@@ -2,7 +2,6 @@ PRAGMA foreign_keys=OFF;
 
 CREATE TABLE "Remito_nuevo" (
   "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-  "fecha" DATETIME NOT NULL,
   "Numero" INTEGER NOT NULL,
   "bolsinId" INTEGER NOT NULL,
   "estadoId" INTEGER NOT NULL,
@@ -12,14 +11,12 @@ CREATE TABLE "Remito_nuevo" (
 
 INSERT INTO "Remito_nuevo" (
   "id",
-  "fecha",
   "Numero",
   "bolsinId",
   "estadoId"
 )
 SELECT
   "id",
-  "fecha",
   CAST(REPLACE("Numero", 'REM-2026-', '') AS INTEGER),
   "bolsinId",
   "estadoId"

@@ -23,7 +23,7 @@ export class PrismaEstadoRepository implements IEstadoRepository {
   ): Promise<EstadoRegistro | null> {
     const cliente = this.comoClienteTransaccional(tx);
     return cliente.estado.findFirst({
-      where: { Nombre: nombre, Ambito: 'BOLSIN', SosAmbitoBolsin: true },
+      where: { Nombre: nombre, Ambito: 'BOLSIN' },
     });
   }
 

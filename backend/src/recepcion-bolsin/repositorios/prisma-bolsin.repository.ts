@@ -50,11 +50,14 @@ export class PrismaBolsinRepository implements IBolsinRepository {
       where: {
         comisionMedicaDestinoId: comisionMedicaId,
         cambiosEstado: {
-          some: { fechaHoraFin: null, estado: { SosEnviado: true } },
+          some: {
+            fechaHoraFin: null,
+            estado: { Nombre: 'Enviado', Ambito: 'BOLSIN' },
+          },
         },
       },
       include: { comisionMedicaOrigen: true },
-      orderBy: { fecha: 'asc' },
+      orderBy: { numeroPrecinto: 'asc' },
     });
   }
 

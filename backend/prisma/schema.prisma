@@ -47,8 +47,6 @@ model Estado {
   id                            Int                            @id @default(autoincrement())
   Nombre                        String
   Ambito                        String
-  SosEnviado                    Boolean                        @default(false)
-  SosAmbitoBolsin               Boolean                        @default(false)
   cambiosEstadoBolsin           CambioEstadoBolsin[]
   remitos                       Remito[]
   cambiosEstadoDocumentacion    CambioEstadoDocumentacion[]
@@ -58,10 +56,7 @@ model Estado {
 
 model Bolsin {
   id                        Int                    @id @default(autoincrement())
-  fecha                     DateTime
-  numeroBolsin              String                 @unique
   numeroPrecinto            Int                    @unique
-  peso                      Float
   comisionMedicaOrigenId    Int
   comisionMedicaDestinoId   Int
   comisionMedicaOrigen      ComisionMedica         @relation("ComisionOrigen", fields: [comisionMedicaOrigenId], references: [id])
@@ -84,7 +79,6 @@ model CambioEstadoBolsin {
 
 model Remito {
   id          Int              @id @default(autoincrement())
-  fecha       DateTime
   Numero      Int              @unique
   bolsinId    Int
   estadoId    Int
@@ -95,7 +89,6 @@ model Remito {
 
 model DetalleRemito {
   id                  Int            @id @default(autoincrement())
-  areaCMCDestino      String
   remitoId            Int
   documentacionId     Int
   remito              Remito         @relation(fields: [remitoId], references: [id])
@@ -104,7 +97,6 @@ model DetalleRemito {
 
 model TipoDocumentacion {
   id               Int              @id @default(autoincrement())
-  descripcion      String
   nombre           String           @unique
   documentaciones  Documentacion[]
 }
@@ -112,8 +104,6 @@ model TipoDocumentacion {
 model Documentacion {
   id                    Int                            @id @default(autoincrement())
   asunto                String
-  fechaPase             DateTime
-  numero                String                         @unique
   tipoDocumentacionId   Int
   tipoDocumentacion     TipoDocumentacion              @relation(fields: [tipoDocumentacionId], references: [id])
   detallesRemito        DetalleRemito[]
