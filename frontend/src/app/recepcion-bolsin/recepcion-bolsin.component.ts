@@ -53,6 +53,8 @@ export class RecepcionBolsinComponent implements OnInit {
 
   inicio?: InicioRecepcion;
   bolsines: BolsinVista[] = [];
+  filtroComisionMedicaId: number | null = null;
+  filtroPrecinto = '';
   bolsinSeleccionado?: BolsinVista;
   detalle?: DetalleBolsinVista;
   opcionSeleccionada?: CodigoOpcionRecepcion;
@@ -91,6 +93,42 @@ export class RecepcionBolsinComponent implements OnInit {
       this.opcionesRecepcion.find((opcion) => opcion.codigo === this.opcionSeleccionada)
         ?.descripcion ?? ''
     );
+  }
+
+  get comisionesMedicasOrigen() {
+    const comisiones = new Map<number, BolsinVista['comisionMedicaOrigen']>();
+    for (const bolsin of this.bolsines) {
+      comisiones.set(bolsin.comisionMedicaOrigen.id, bolsin.comisionMedicaOrigen);
+    }
+    return [...comisiones.values()].sort((a, b) => a.nombre.localeCompare(b.nombre));
+  }
+
+  get bolsinesFiltrados(): BolsinVista[] {
+    const precintoBuscado = this.filtroPrecinto.trim();
+
+    return this.bolsines.filter((bolsin) => {
+      const coincideComision =
+        this.filtroComisionMedicaId === null ||
+        bolsin.comisionMedicaOrigen.id === this.filtroComisionMedicaId;
+      const coincidePrecinto =
+        precintoBuscado === '' ||
+        String(bolsin.numeroPrecinto).includes(precintoBuscado);
+
+      return coincideComision && coincidePrecinto;
+    });
+  }
+
+  actualizarFiltroComision(event: Event): void {
+    const valor = (event.target as HTMLSelectElement).value;
+    this.filtroComisionMedicaId = valor === '' ? null : Number(valor);
+  }
+
+  actualizarFiltroPrecinto(event: Event): void {
+    this.filtroPrecinto = (event.target as HTMLInputElement).value;
+  }
+
+  obtenerLocalidadComision(nombre: string): string {
+    return nombre.replace(/^Comisi[oó]n M[eé]dica\s+/i, '').trim();
   }
 
   cargarInicio(): void {

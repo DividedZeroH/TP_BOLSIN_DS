@@ -15,15 +15,52 @@
   <section class="step-card">
     <span class="step-number">2</span>
     <div class="step-content">
-      <h2>Seleccionar bolsin para recepcion</h2>
+      <div class="bolsin-card-header">
+        <h2>Seleccionar bolsin para recepcion</h2>
+
+        <div *ngIf="!cargando && bolsines.length > 0" class="filter-bar" aria-label="Filtros de bolsines">
+          <label class="filter-field">
+            <span>Comision medica</span>
+            <select
+              [value]="filtroComisionMedicaId ?? ''"
+              (change)="actualizarFiltroComision($event)"
+            >
+              <option value="">Todas</option>
+              <option
+                *ngFor="let comision of comisionesMedicasOrigen"
+                [value]="comision.id"
+              >
+                {{ obtenerLocalidadComision(comision.nombre) }}
+              </option>
+            </select>
+          </label>
+
+          <label class="filter-field filter-field-precinto">
+            <span>Precinto</span>
+            <input
+              type="search"
+              inputmode="numeric"
+              [value]="filtroPrecinto"
+              (input)="actualizarFiltroPrecinto($event)"
+              placeholder="Buscar numero"
+            />
+          </label>
+        </div>
+      </div>
 
       <p *ngIf="cargando" class="state-message">Cargando bolsines...</p>
       <p *ngIf="mensajeCarga" class="state-message error-text">{{ mensajeCarga }}</p>
       <p *ngIf="!cargando && bolsines.length === 0" class="state-message">
         No hay bolsines disponibles.
       </p>
+      <p
+        *ngIf="!cargando && bolsines.length > 0 && bolsinesFiltrados.length === 0"
+        class="state-message"
+      >
+        No se encontraron bolsines para los filtros seleccionados.
+      </p>
 
-      <div *ngIf="!cargando && bolsines.length > 0" class="table-wrap">
+      <div *ngIf="!cargando && bolsinesFiltrados.length > 0" class="table-wrap">
         <table>
           <thead>
             <tr>
@@ -34,7 +71,7 @@
           </thead>
           <tbody>
             <tr
-              *ngFor="let bolsin of bolsines; trackBy: trackByBolsin"
+              *ngFor="let bolsin of bolsinesFiltrados; trackBy: trackByBolsin"
               [class.selected-row]="bolsinSeleccionado?.id === bolsin.id"
             >
               <td>{{ bolsin.numeroPrecinto }}</td>
