@@ -1,23 +1,23 @@
 import { Injectable } from '@nestjs/common';
-import { Estado } from '../dominio/estado';
-import { Empleado } from '../dominio/empleado';
-import { ComisionMedica } from '../dominio/comisionMedica';
-import { Remito } from '../dominio/remito';
-import { Documentacion } from '../dominio/documentacion';
-import { Bolsin } from '../dominio/bolsin';
-import { CambioEstadoBolsin } from '../dominio/cambioEstadoBolsin';
-import { CambioEstadoDocumentacion } from '../dominio/cambioEstadoDocumentacion';
-import { DetalleRemito } from '../dominio/detalleRemito';
-import { TipoDocumentacion } from '../dominio/tipoDocumentacion';
-import { EstadoRegistro } from './repositorios/estado.registro';
-import { EmpleadoConComisionRegistro } from './repositorios/empleado-con-comision.registro';
-import { BolsinCompletoRegistro } from './repositorios/bolsin-completo.registro';
+import { Estado } from '../../dominio/estado';
+import { Empleado } from '../../dominio/empleado';
+import { ComisionMedica } from '../../dominio/comisionMedica';
+import { Remito } from '../../dominio/remito';
+import { Documentacion } from '../../dominio/documentacion';
+import { Bolsin } from '../../dominio/bolsin';
+import { CambioEstadoBolsin } from '../../dominio/cambioEstadoBolsin';
+import { CambioEstadoDocumentacion } from '../../dominio/cambioEstadoDocumentacion';
+import { DetalleRemito } from '../../dominio/detalleRemito';
+import { TipoDocumentacion } from '../../dominio/tipoDocumentacion';
+import { EstadoRegistro } from '../repositorio/estado.registro';
+import { EmpleadoConComisionRegistro } from '../repositorio/empleado-con-comision.registro';
+import { BolsinCompletoRegistro } from '../repositorio/bolsin-completo.registro';
 
 /**
  * Pure Fabrication: no existe en el diagrama de dominio, pero concentra todo
  * el mapeo objeto-relacional (registro plano -> clases de dominio) que antes
- * vivía disperso como métodos privados del gestor. Así el gestor se queda
- * con la orquestación del caso de uso (SRP) y este mapper con la traducción
+ * vivía disperso como métodos privados del gestor. Así el Servicio se queda
+ * con la lógica del caso de uso (SRP) y este mapper con la traducción
  * de datos persistentes a objetos de dominio.
  */
 @Injectable()

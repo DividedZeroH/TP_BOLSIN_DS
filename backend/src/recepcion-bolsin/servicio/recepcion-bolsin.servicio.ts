@@ -5,59 +5,86 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { Estado } from '../dominio/estado';
-import { Empleado } from '../dominio/empleado';
-import { ComisionMedica } from '../dominio/comisionMedica';
-import { Remito } from '../dominio/remito';
-import { Documentacion } from '../dominio/documentacion';
-import { Bolsin } from '../dominio/bolsin';
+import { Estado } from '../../dominio/estado';
+import { Empleado } from '../../dominio/empleado';
+import { ComisionMedica } from '../../dominio/comisionMedica';
+import { Remito } from '../../dominio/remito';
+import { Documentacion } from '../../dominio/documentacion';
+import { Bolsin } from '../../dominio/bolsin';
 import { BolsinMapper } from './bolsin.mapper';
 import {
   BOLSIN_REPOSITORY,
   IBolsinRepository,
-} from './repositorios/bolsin.repository';
+} from '../repositorio/bolsin.repository';
 import {
   ESTADO_REPOSITORY,
   IEstadoRepository,
-} from './repositorios/estado.repository';
+} from '../repositorio/estado.repository';
 import {
   ISesionRepository,
   SESION_REPOSITORY,
-} from './repositorios/sesion.repository';
+} from '../repositorio/sesion.repository';
+import { BolsinResumenRegistro } from '../repositorio/bolsin-resumen.registro';
 import { MANEJADORES_OPCION_RECEPCION } from './opcion-recepcion.handlers';
-import { RecepcionBolsinPresenter } from './recepcion-bolsin.presenter';
 import {
-  DetalleBolsinVista,
-  InicioRecepcionVista,
   OpcionRecepcion,
   ResultadoRecepcionBolsin,
-} from './recepcion-bolsin.modelos';
+} from '../recepcion-bolsin.modelos';
+
+/** Datos de dominio que produce el inicio del CU para que el Control los presente. */
+export interface InicioRecepcion {
+  empleado: Empleado;
+  comision: ComisionMedica;
+  bolsines: BolsinResumenRegistro[];
+}
 
 /**
- * Clase Control/Gestor del análisis. Coordina exactamente el flujo normal y
- * mantiene las decisiones de negocio fuera del controlador HTTP. El acceso a
- * datos queda detrás de interfaces de Repository (DIP); este gestor no
- * conoce Prisma ni SQLite.
+ * Capa de Servicio: concentra la lógica de negocio del CU. Reconstruye el
+ * agregado con el Mapper, valida las reglas y ejecuta la confirmación
+ * transaccional. Trabaja contra interfaces de Repository (DIP); no conoce
+ * Prisma ni SQLite, y no arma respuestas de pantalla (eso es del Control).
  */
 @Injectable()
-export class GestorRegistrarRecepcionBolsin {
-  private readonly logger = new Logger(GestorRegistrarRecepcionBolsin.name);
+export class RecepcionBolsinServicio {
+  private readonly logger = new Logger(RecepcionBolsinServicio.name);
 
   constructor(
     @Inject(BOLSIN_REPOSITORY) private readonly bolsinRepository: IBolsinRepository,
     @Inject(ESTADO_REPOSITORY) private readonly estadoRepository: IEstadoRepository,
     @Inject(SESION_REPOSITORY) private readonly sesionRepository: ISesionRepository,
     private readonly mapper: BolsinMapper,
-    private readonly presenter: RecepcionBolsinPresenter,
   ) {}
 
-  /** Inicia el CU obteniendo usuario, comisión y bolsines enviados a destino. */
-  async nuevaRecepcionBolsin(sesionId: number): Promise<InicioRecepcionVista> {
+  /** Inicia el CU: usuario logueado, su comisión y los bolsines enviados a destino. */
+  async iniciarRecepcion(sesionId: number): Promise<InicioRecepcion> {
     const empleado = await this.buscarUsuarioLogueado(sesionId);
     const comision = this.buscarComisionMedicaUsuario(empleado);
     const bolsines = await this.buscarBolsinEnviadoCMUsuario(comision.id);
 
-    return this.presenter.presentarInicio(empleado, comision, bolsines);
+    return { empleado, comision, bolsines };
+  }
+
+  /** Recupera el agregado seleccionado validando que esté disponible para la comisión. */
+  async obtenerBolsinParaRecepcion(
+    sesionId: number,
+    bolsinId: number,
+  ): Promise<Bolsin> {
+    const empleado = await this.buscarUsuarioLogueado(sesionId);
+    const comision = this.buscarComisionMedicaUsuario(empleado);
+    const registro = await this.bolsinRepository.buscarCompletoPorIdYDestino(
+      bolsinId,
+      comision.id,
+    );
+    if (!registro) {
+      throw new NotFoundException('No se encontró el bolsín seleccionado.');
+    }
+
+    const bolsin = this.mapper.mapearBolsin(registro);
+    if (!this.validarComisionMedicaBolsin(bolsin, comision) || !bolsin.sosEnviado()) {
+      throw new NotFoundException('El bolsín no está disponible para esta comisión.');
+    }
+
+    return bolsin;
   }
 
   /** El Empleado es el experto que conoce su propia ComisionMedica. */
@@ -98,29 +125,6 @@ export class GestorRegistrarRecepcionBolsin {
     return bolsines.map((bolsin) => bolsin.obtenerCMOrigen());
   }
 
-  /** Recupera el agregado seleccionado y prepara la información de pantalla. */
-  async tomarBolsin(
-    sesionId: number,
-    bolsinId: number,
-  ): Promise<DetalleBolsinVista> {
-    const empleado = await this.buscarUsuarioLogueado(sesionId);
-    const comision = this.buscarComisionMedicaUsuario(empleado);
-    const registro = await this.bolsinRepository.buscarCompletoPorIdYDestino(
-      bolsinId,
-      comision.id,
-    );
-    if (!registro) {
-      throw new NotFoundException('No se encontró el bolsín seleccionado.');
-    }
-
-    const bolsin = this.mapper.mapearBolsin(registro);
-    if (!this.validarComisionMedicaBolsin(bolsin, comision) || !bolsin.sosEnviado()) {
-      throw new NotFoundException('El bolsín no está disponible para esta comisión.');
-    }
-
-    return this.presenter.presentarDetalle(bolsin);
-  }
-
   buscarRemitoBolsin(bolsin: Bolsin): Remito[] {
     return bolsin.buscarRemitoBolsin();
   }
@@ -130,9 +134,8 @@ export class GestorRegistrarRecepcionBolsin {
   }
 
   /**
-   * Punto único de entrada del paso de confirmación: valida la opción elegida
-   * (flujo normal) y, recién entonces, ejecuta la confirmación del CU. Permite
-   * que el controlador delegue con una sola llamada por endpoint.
+   * Punto único del paso de confirmación: valida la opción elegida (flujo
+   * normal) y, recién entonces, ejecuta la confirmación del CU.
    */
   async confirmarRecepcion(
     sesionId: number,

@@ -3,12 +3,12 @@ import { Test } from '@nestjs/testing';
 import request = require('supertest');
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
-import { GestorRegistrarRecepcionBolsin } from '../src/recepcion-bolsin/gestor-registrar-recepcion-bolsin.service';
+import { RecepcionBolsinServicio } from '../src/recepcion-bolsin/servicio/recepcion-bolsin.servicio';
 
 describe('Registrar recepción de bolsín (e2e)', () => {
   let app: INestApplication;
   let prisma: PrismaService;
-  let gestor: GestorRegistrarRecepcionBolsin;
+  let servicio: RecepcionBolsinServicio;
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
@@ -16,7 +16,7 @@ describe('Registrar recepción de bolsín (e2e)', () => {
     app.setGlobalPrefix('api');
     await app.init();
     prisma = app.get(PrismaService);
-    gestor = app.get(GestorRegistrarRecepcionBolsin);
+    servicio = app.get(RecepcionBolsinServicio);
   });
 
   afterAll(async () => app.close());
@@ -61,9 +61,9 @@ describe('Registrar recepción de bolsín (e2e)', () => {
     // Se fuerza un fallo luego de la primera escritura. Prisma debe revertir
     // el cambio de bolsín y CU29 no debe ejecutarse.
     const fallo = jest
-      .spyOn(gestor, 'actualizarEstadoRemito')
+      .spyOn(servicio, 'actualizarEstadoRemito')
       .mockRejectedValueOnce(new Error('Fallo simulado'));
-    const notificacion = jest.spyOn(gestor, 'llamarCU29');
+    const notificacion = jest.spyOn(servicio, 'llamarCU29');
     await request(app.getHttpServer())
       .post(`/api/recepciones-bolsines/${bolsinId}/confirmar`)
       .send({ sesionId: 1, opcion: 'CONTENIDO_IGUAL', confirmacion: true })

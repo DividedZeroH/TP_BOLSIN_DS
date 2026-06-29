@@ -7,8 +7,8 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
-import { GestorRegistrarRecepcionBolsin } from './gestor-registrar-recepcion-bolsin.service';
-import { ConfirmarRecepcionBolsinDto } from './recepcion-bolsin.modelos';
+import { GestorRegistrarRecepcionBolsin } from './gestor-registrar-recepcion-bolsin';
+import { ConfirmarRecepcionBolsinDto } from '../recepcion-bolsin.modelos';
 
 /** Adaptador HTTP: traduce solicitudes web a mensajes dirigidos al Gestor. */
 @Controller('recepciones-bolsines')

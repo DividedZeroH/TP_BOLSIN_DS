@@ -1,20 +1,18 @@
 import { Injectable } from '@nestjs/common';
-import { Empleado } from '../dominio/empleado';
-import { ComisionMedica } from '../dominio/comisionMedica';
-import { Bolsin } from '../dominio/bolsin';
-import { BolsinResumenRegistro } from './repositorios/bolsin-resumen.registro';
+import { Empleado } from '../../dominio/empleado';
+import { ComisionMedica } from '../../dominio/comisionMedica';
+import { Bolsin } from '../../dominio/bolsin';
+import { BolsinResumenRegistro } from '../repositorio/bolsin-resumen.registro';
 import {
   DetalleBolsinVista,
   InicioRecepcionVista,
   OPCION_CONTENIDO_IGUAL,
-} from './recepcion-bolsin.modelos';
+} from '../recepcion-bolsin.modelos';
 
 /**
  * Output mapper (Pure Fabrication): traduce las entidades de dominio a los
- * objetos de presentación que consume la pantalla. Concentra la lógica de
- * presentación que antes vivía dentro del Gestor; así el Gestor se queda con
- * la orquestación pura del caso de uso (SRP) y esta clase con el armado de la
- * vista, de forma simétrica al BolsinMapper de entrada.
+ * objetos de presentación que consume la pantalla. Vive en la capa de Control
+ * porque la presentación es responsabilidad de la frontera, no del Servicio.
  */
 @Injectable()
 export class RecepcionBolsinPresenter {

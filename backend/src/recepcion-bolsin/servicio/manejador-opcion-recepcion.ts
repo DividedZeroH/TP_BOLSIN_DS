@@ -1,4 +1,4 @@
-import { OpcionRecepcion } from './recepcion-bolsin.modelos';
+import { OpcionRecepcion } from '../recepcion-bolsin.modelos';
 
 /**
  * Descriptor de un manejador de opción de recepción. `implementado en false`
