@@ -25,8 +25,10 @@ import {
   SESION_REPOSITORY,
 } from './repositorios/sesion.repository';
 import { MANEJADORES_OPCION_RECEPCION } from './opcion-recepcion.handlers';
+import { RecepcionBolsinPresenter } from './recepcion-bolsin.presenter';
 import {
-  OPCION_CONTENIDO_IGUAL,
+  DetalleBolsinVista,
+  InicioRecepcionVista,
   OpcionRecepcion,
   ResultadoRecepcionBolsin,
 } from './recepcion-bolsin.modelos';
@@ -46,27 +48,16 @@ export class GestorRegistrarRecepcionBolsin {
     @Inject(ESTADO_REPOSITORY) private readonly estadoRepository: IEstadoRepository,
     @Inject(SESION_REPOSITORY) private readonly sesionRepository: ISesionRepository,
     private readonly mapper: BolsinMapper,
+    private readonly presenter: RecepcionBolsinPresenter,
   ) {}
 
   /** Inicia el CU obteniendo usuario, comisión y bolsines enviados a destino. */
-  async nuevaRecepcionBolsin(sesionId: number) {
+  async nuevaRecepcionBolsin(sesionId: number): Promise<InicioRecepcionVista> {
     const empleado = await this.buscarUsuarioLogueado(sesionId);
     const comision = this.buscarComisionMedicaUsuario(empleado);
     const bolsines = await this.buscarBolsinEnviadoCMUsuario(comision.id);
 
-    return {
-      usuarioLogueado: {
-        id: empleado.id,
-        apellido: empleado.apellido,
-        email: empleado.email,
-      },
-      comisionMedica: { id: comision.id, nombre: comision.getNombre() },
-      bolsines: bolsines.map((bolsin) => ({
-        id: bolsin.id,
-        numeroPrecinto: bolsin.numeroPrecinto,
-        comisionMedicaOrigen: bolsin.comisionMedicaOrigen,
-      })),
-    };
+    return this.presenter.presentarInicio(empleado, comision, bolsines);
   }
 
   /** El Empleado es el experto que conoce su propia ComisionMedica. */
@@ -108,7 +99,10 @@ export class GestorRegistrarRecepcionBolsin {
   }
 
   /** Recupera el agregado seleccionado y prepara la información de pantalla. */
-  async tomarBolsin(sesionId: number, bolsinId: number) {
+  async tomarBolsin(
+    sesionId: number,
+    bolsinId: number,
+  ): Promise<DetalleBolsinVista> {
     const empleado = await this.buscarUsuarioLogueado(sesionId);
     const comision = this.buscarComisionMedicaUsuario(empleado);
     const registro = await this.bolsinRepository.buscarCompletoPorIdYDestino(
@@ -123,27 +117,8 @@ export class GestorRegistrarRecepcionBolsin {
     if (!this.validarComisionMedicaBolsin(bolsin, comision) || !bolsin.sosEnviado()) {
       throw new NotFoundException('El bolsín no está disponible para esta comisión.');
     }
-    const remitos = this.buscarRemitoBolsin(bolsin);
 
-    return {
-      id: bolsin.id,
-      numeroPrecinto: bolsin.getNumeroPrecinto(),
-      remitos: remitos.map((remito) => ({
-        id: remito.id,
-        numero: remito.getNumero(),
-        documentaciones: remito.buscarDocumentacion().map((documentacion) => ({
-          id: documentacion.id,
-          tipo: documentacion.mostrarTipoDocumentacion(),
-          asunto: documentacion.getAsunto(),
-        })),
-      })),
-      opciones: [
-        {
-          codigo: OPCION_CONTENIDO_IGUAL,
-          descripcion: 'El contenido del bolsín es igual al registrado.',
-        },
-      ],
-    };
+    return this.presenter.presentarDetalle(bolsin);
   }
 
   buscarRemitoBolsin(bolsin: Bolsin): Remito[] {
@@ -152,6 +127,21 @@ export class GestorRegistrarRecepcionBolsin {
 
   buscarDocumentacionBolsin(bolsin: Bolsin): Documentacion[] {
     return bolsin.buscarDocumentacionBolsin();
+  }
+
+  /**
+   * Punto único de entrada del paso de confirmación: valida la opción elegida
+   * (flujo normal) y, recién entonces, ejecuta la confirmación del CU. Permite
+   * que el controlador delegue con una sola llamada por endpoint.
+   */
+  async confirmarRecepcion(
+    sesionId: number,
+    bolsinId: number,
+    opcion: OpcionRecepcion,
+    confirmacion: boolean,
+  ): Promise<ResultadoRecepcionBolsin> {
+    this.tomarOpcion(opcion);
+    return this.tomarConfirmacion(sesionId, bolsinId, confirmacion);
   }
 
   /** Solo acepta la primera opción porque los flujos alternativos están fuera. */

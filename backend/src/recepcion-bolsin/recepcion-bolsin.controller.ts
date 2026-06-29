@@ -33,10 +33,10 @@ export class RecepcionBolsinController {
     @Param('bolsinId', ParseIntPipe) bolsinId: number,
     @Body() dto: ConfirmarRecepcionBolsinDto,
   ) {
-    this.gestor.tomarOpcion(dto.opcion);
-    return this.gestor.tomarConfirmacion(
+    return this.gestor.confirmarRecepcion(
       Number(dto.sesionId),
       bolsinId,
+      dto.opcion,
       dto.confirmacion,
     );
   }

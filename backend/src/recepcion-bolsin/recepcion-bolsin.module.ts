@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { GestorRegistrarRecepcionBolsin } from './gestor-registrar-recepcion-bolsin.service';
 import { RecepcionBolsinController } from './recepcion-bolsin.controller';
 import { BolsinMapper } from './bolsin.mapper';
+import { RecepcionBolsinPresenter } from './recepcion-bolsin.presenter';
 import { BOLSIN_REPOSITORY } from './repositorios/bolsin.repository';
 import { PrismaBolsinRepository } from './repositorios/prisma-bolsin.repository';
 import { ESTADO_REPOSITORY } from './repositorios/estado.repository';
@@ -14,6 +15,7 @@ import { PrismaSesionRepository } from './repositorios/prisma-sesion.repository'
   providers: [
     GestorRegistrarRecepcionBolsin,
     BolsinMapper,
+    RecepcionBolsinPresenter,
     { provide: BOLSIN_REPOSITORY, useClass: PrismaBolsinRepository },
     { provide: ESTADO_REPOSITORY, useClass: PrismaEstadoRepository },
     { provide: SESION_REPOSITORY, useClass: PrismaSesionRepository },
