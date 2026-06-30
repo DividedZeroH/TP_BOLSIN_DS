@@ -1,15 +1,15 @@
 import { EstadoRegistro } from './estado.registro';
 
-/** Token de inyección DIP: el gestor depende de esta interfaz, no de Prisma. */
+/** Token de inyección DIP: el servicio depende de esta interfaz, no de Prisma. */
 export const ESTADO_REPOSITORY = 'ESTADO_REPOSITORY';
 
 /**
- * Abstracción de acceso al catálogo Estado. El gestor solo conoce esta
+ * Abstracción de acceso al catálogo Estado. El servicio solo conoce esta
  * interfaz; quién la implementa (Prisma, en memoria para tests, etc.) es un
  * detalle de infraestructura (DIP).
  */
 export interface IEstadoRepository {
-  /** Misma clave natural Nombre+Ambito, dentro de una transacción abierta por el gestor. */
+  /** Misma clave natural Nombre+Ambito, dentro de una transacción abierta por el servicio. */
   buscarPorNombreYAmbitoEnTx(
     tx: unknown,
     nombre: string,

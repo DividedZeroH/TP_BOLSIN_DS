@@ -4,7 +4,7 @@ import { SesionConUsuarioRegistro } from './sesion-con-usuario.registro';
 export const SESION_REPOSITORY = 'SESION_REPOSITORY';
 
 /**
- * Abstracción de acceso a Sesion. El gestor navega Sesion -> Usuario ->
+ * Abstracción de acceso a Sesion. El servicio navega Sesion -> Usuario ->
  * Empleado sin saber que detrás hay Prisma/SQLite (DIP).
  */
 export interface ISesionRepository {

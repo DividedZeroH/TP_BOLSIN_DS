@@ -1,4 +1,11 @@
+// Modelos de entrada/salida del CU: códigos de opción, DTO de la petición de
+// confirmación y resultado del caso de uso. Los ViewModels de pantalla están
+// más abajo y los construye el Presenter.
+
+/** Opción del flujo normal (la única implementada). */
 export const OPCION_CONTENIDO_IGUAL = 'CONTENIDO_IGUAL' as const;
+
+/** Las cuatro opciones posibles del CU; solo la primera tiene implementación. */
 export const OPCIONES_RECEPCION = [
   OPCION_CONTENIDO_IGUAL,
   'FALTA_DOCUMENTACION',
@@ -6,14 +13,17 @@ export const OPCIONES_RECEPCION = [
   'REDIRIGIR_OTRA_AREA',
 ] as const;
 
+/** Unión de los códigos de opción válidos. */
 export type OpcionRecepcion = (typeof OPCIONES_RECEPCION)[number];
 
+/** Cuerpo de la petición POST de confirmación de recepción. */
 export class ConfirmarRecepcionBolsinDto {
   sesionId!: number;
   opcion!: OpcionRecepcion;
   confirmacion!: boolean;
 }
 
+/** Resultado del CU: estados finales del bolsín, remitos y documentación. */
 export interface ResultadoRecepcionBolsin {
   bolsinId: number;
   estadoBolsin: 'Recibido';

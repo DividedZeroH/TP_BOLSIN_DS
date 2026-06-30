@@ -1,8 +1,14 @@
+// Modelos de vista del frontend: códigos de opción del CU y las formas de los
+// datos que se intercambian con la API (espejo de los ViewModels del backend).
+// Varios campos son opcionales para tolerar respuestas parciales del servidor.
+
+/** Códigos de las cuatro opciones del flujo (solo CONTENIDO_IGUAL implementada). */
 export const OPCION_CONTENIDO_IGUAL = 'CONTENIDO_IGUAL' as const;
 export const OPCION_FALTA_DOCUMENTACION = 'FALTA_DOCUMENTACION' as const;
 export const OPCION_DOCUMENTACION_NO_CORRESPONDE = 'DOCUMENTACION_NO_CORRESPONDE' as const;
 export const OPCION_REDIRIGIR_OTRA_AREA = 'REDIRIGIR_OTRA_AREA' as const;
 
+/** Unión de los códigos de opción válidos. */
 export type CodigoOpcionRecepcion =
   | typeof OPCION_CONTENIDO_IGUAL
   | typeof OPCION_FALTA_DOCUMENTACION

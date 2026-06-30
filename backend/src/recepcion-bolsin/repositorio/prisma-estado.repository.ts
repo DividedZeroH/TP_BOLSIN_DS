@@ -30,7 +30,7 @@ export class PrismaEstadoRepository implements IEstadoRepository {
   /**
    * El tipo `Prisma.TransactionClient` solo existe dentro de esta
    * implementación: la interfaz expone `unknown` para no filtrar detalles de
-   * Prisma hacia el gestor (DIP).
+   * Prisma hacia el servicio (DIP).
    */
   private comoClienteTransaccional(tx: unknown): Prisma.TransactionClient {
     return tx as Prisma.TransactionClient;

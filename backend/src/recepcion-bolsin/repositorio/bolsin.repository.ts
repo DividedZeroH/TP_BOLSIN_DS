@@ -5,7 +5,7 @@ import { BolsinCompletoRegistro } from './bolsin-completo.registro';
 export const BOLSIN_REPOSITORY = 'BOLSIN_REPOSITORY';
 
 /**
- * Abstracción del agregado Bolsin. El gestor de aplicación trabaja contra
+ * Abstracción del agregado Bolsin. El servicio de aplicación trabaja contra
  * esta interfaz (DIP); `PrismaBolsinRepository` es el único punto que conoce
  * Prisma/SQLite y el include necesario para reconstruir el agregado.
  */

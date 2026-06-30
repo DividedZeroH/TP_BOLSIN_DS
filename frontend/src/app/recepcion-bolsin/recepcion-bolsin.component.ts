@@ -14,14 +14,24 @@ import {
 } from './recepcion-bolsin.modelos';
 import { RecepcionBolsinService } from './recepcion-bolsin.service';
 
+/** Tipo de diálogo modal que puede mostrarse al usuario. */
 type TipoModal = 'exito' | 'error' | 'cancelacion';
 
+/** Contenido del modal que se muestra según el resultado de una acción. */
 interface ModalRecepcion {
   tipo: TipoModal;
   titulo: string;
   mensaje: string;
 }
 
+/**
+ * Pantalla del caso de uso "Registrar recepción de bolsín" (Boundary). Carga
+ * los bolsines a recibir, permite seleccionar uno y ver su detalle, elegir la
+ * opción del flujo y confirmar la recepción contra el backend. Mantiene el
+ * estado de la UI (carga, selección, confirmación y modales) y delega el
+ * acceso a la API en `RecepcionBolsinService`. Solo la opción
+ * `CONTENIDO_IGUAL` llega al backend; las demás quedan fuera del alcance.
+ */
 @Component({
   selector: 'app-recepcion-bolsin',
   imports: [CommonModule],
@@ -51,6 +61,7 @@ export class RecepcionBolsinComponent implements OnInit {
     },
   ];
 
+  // Estado de la pantalla: datos cargados, selección actual y banderas de UI.
   inicio?: InicioRecepcion;
   bolsines: BolsinVista[] = [];
   bolsinSeleccionado?: BolsinVista;
@@ -68,10 +79,12 @@ export class RecepcionBolsinComponent implements OnInit {
     private readonly router: Router,
   ) {}
 
+  /** Al inicializar la pantalla, carga los bolsines a recibir. */
   ngOnInit(): void {
     this.cargarInicio();
   }
 
+  /** Texto del usuario logueado a mostrar, con respaldos si faltan datos. */
   get usuarioLogueadoTexto(): string {
     const usuario = this.inicio?.usuarioLogueado;
     if (usuario?.email) {
@@ -86,6 +99,7 @@ export class RecepcionBolsinComponent implements OnInit {
     return 'Usuario logueado';
   }
 
+  /** Descripción de la opción actualmente seleccionada (o cadena vacía). */
   get opcionSeleccionadaTexto(): string {
     return (
       this.opcionesRecepcion.find((opcion) => opcion.codigo === this.opcionSeleccionada)
@@ -93,6 +107,7 @@ export class RecepcionBolsinComponent implements OnInit {
     );
   }
 
+  /** Pide al backend los datos de inicio y deja la lista de bolsines lista. */
   cargarInicio(): void {
     this.cargando = true;
     this.mensajeCarga = undefined;
@@ -109,6 +124,7 @@ export class RecepcionBolsinComponent implements OnInit {
     });
   }
 
+  /** Selecciona un bolsín y carga su detalle (remitos y documentación). */
   seleccionarBolsin(bolsin: BolsinVista): void {
     this.bolsinSeleccionado = bolsin;
     this.detalle = undefined;
@@ -130,6 +146,7 @@ export class RecepcionBolsinComponent implements OnInit {
     });
   }
 
+  /** Marca la opción del flujo elegida por el usuario. */
   seleccionarOpcion(codigo: CodigoOpcionRecepcion): void {
     this.opcionSeleccionada = codigo;
   }
@@ -138,6 +155,7 @@ export class RecepcionBolsinComponent implements OnInit {
     this.cancelarCasoUso();
   }
 
+  /** Abre el modal que pide confirmar la cancelación del caso de uso. */
   cancelarCasoUso(): void {
     this.modal = {
       tipo: 'cancelacion',
@@ -146,14 +164,22 @@ export class RecepcionBolsinComponent implements OnInit {
     };
   }
 
+  /** Confirma la cancelación y vuelve al panel de control. */
   confirmarCancelacion(): void {
     void this.router.navigate(['/panel']);
   }
 
+  /** Descarta la cancelación y cierra el modal. */
   rechazarCancelacion(): void {
     this.modal = undefined;
   }
 
+  /**
+   * Confirma la recepción del bolsín seleccionado. Valida que haya bolsín y
+   * opción; solo CONTENIDO_IGUAL llega al backend (las otras se resuelven en
+   * la UI). Muestra el modal de éxito tanto al confirmar como ante error de
+   * red, porque los flujos alternativos no están implementados en el servidor.
+   */
   confirmarRecepcion(): void {
     if (!this.bolsinSeleccionado || !this.opcionSeleccionada) {
       this.modal = {
@@ -184,6 +210,7 @@ export class RecepcionBolsinComponent implements OnInit {
       });
   }
 
+  /** Cierra el modal; si fue de éxito, limpia el bolsín ya recibido de la lista. */
   cerrarModal(): void {
     const tipoModal = this.modal?.tipo;
     this.modal = undefined;
@@ -192,6 +219,7 @@ export class RecepcionBolsinComponent implements OnInit {
     }
   }
 
+  // Funciones trackBy para *ngFor: evitan re-render innecesario usando el id.
   trackByBolsin(_: number, bolsin: BolsinVista): number {
     return bolsin.id;
   }
@@ -204,6 +232,7 @@ export class RecepcionBolsinComponent implements OnInit {
     return documentacion.id;
   }
 
+  /** Recuerda el bolsín recibido y muestra el modal de éxito. */
   private registrarExito(bolsinId?: number): void {
     this.bolsinRegistradoId = bolsinId;
     this.modal = {
@@ -213,6 +242,7 @@ export class RecepcionBolsinComponent implements OnInit {
     };
   }
 
+  /** Quita el bolsín ya recibido de la lista y resetea la selección. */
   private limpiarSeleccionRegistrada(): void {
     if (this.bolsinRegistradoId !== undefined) {
       this.bolsines = this.bolsines.filter(
