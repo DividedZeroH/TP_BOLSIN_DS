@@ -1,6 +1,6 @@
 
-import { Empleado } from './empleado';
-import { Estado } from './estado';
+import { Empleado } from '../../identidad';
+import { Estado } from '../../catalogo';
 
 
 export class CambioEstadoDocumentacion {

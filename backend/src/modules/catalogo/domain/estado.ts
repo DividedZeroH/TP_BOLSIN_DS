@@ -30,4 +30,8 @@ export class Estado {
   sosAmbitoDocumentacion(): boolean {
     return this.Ambito.toUpperCase() === 'DOCUMENTACION';
   }
+
+  sosAceptada(): boolean {
+    return this.Nombre.toUpperCase() === 'ACEPTADA';
+  }
 }

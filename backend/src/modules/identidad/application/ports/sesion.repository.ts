@@ -1,14 +1,13 @@
-import { SesionConUsuarioRegistro } from './sesion-con-usuario.registro';
+import { Sesion } from '../../domain/sesion';
 
 /** Token de inyección DIP para la sesión/usuario/empleado logueado. */
 export const SESION_REPOSITORY = 'SESION_REPOSITORY';
 
 /**
- * Abstracción de acceso a Sesion. El gestor navega Sesion -> Usuario ->
- * Empleado sin saber que detrás hay Prisma/SQLite (DIP).
+ * Puerto de salida de Sesion. Devuelve el agregado de dominio completo para
+ * que el gestor navegue `Sesion -> Usuario -> Empleado` con los mensajes del
+ * diagrama de secuencia, en vez de recibir una fila ya aplanada.
  */
 export interface ISesionRepository {
-  buscarConUsuarioYEmpleado(
-    sesionId: number,
-  ): Promise<SesionConUsuarioRegistro | null>;
+  buscarPorId(sesionId: number): Promise<Sesion | null>;
 }

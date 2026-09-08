@@ -1,6 +1,6 @@
-import { Estado } from './estado';
-import { Empleado } from './empleado';
-import { ComisionMedica } from './comisionMedica';
+import { Estado } from '../../catalogo';
+import { Empleado } from '../../identidad';
+import { ComisionMedica } from '../../organizacion';
 import { Remito } from './remito';
 import { CambioEstadoBolsin} from './cambioEstadoBolsin';
 import { Documentacion } from './documentacion';

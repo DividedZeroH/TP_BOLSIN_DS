@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Prisma necesita la variable aunque solo genere el cliente; los tests e2e
+# usan su propia base SQLite (file:./test.db).
+env:
+  DATABASE_URL: "file:./dev.db"
+
+jobs:
+  verificacion:
+    name: Lint, build y tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      # `npm ci` dispara el postinstall del backend, que corre `prisma generate`.
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Lint (reglas de capa hexagonal + calidad)
+        run: npm run lint
+
+      - name: Build (backend + frontend)
+        run: npm run build
+
+      # Incluye arquitectura.spec.ts: regla de dependencia, límites entre
+      # subdominios y API pública de cada módulo.
+      - name: Tests de arquitectura y unitarios (backend)
+        run: npm test --workspace backend
+
+      - name: Tests e2e (backend)
+        run: npm run test:e2e --workspace backend
+
+      - name: Tests (frontend)
+        run: npm run test --workspace frontend -- --watch=false --browsers=ChromeHeadlessCI
+        env:
+          CHROME_BIN: /usr/bin/google-chrome

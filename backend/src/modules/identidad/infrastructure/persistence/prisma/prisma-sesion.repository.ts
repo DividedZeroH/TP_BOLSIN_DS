@@ -1,17 +1,17 @@
-import { Injectable } from '@nestjs/common';
-import { PrismaService } from '../../prisma/prisma.service';
-import { ISesionRepository } from './sesion.repository';
-import { SesionConUsuarioRegistro } from './sesion-con-usuario.registro';
+import { Prisma } from '@prisma/client';
+import { Sesion } from '../../../domain/sesion';
+import { ISesionRepository } from '../../../application/ports/sesion.repository';
+import { IdentidadMapper } from './identidad.mapper';
 
-/** Única implementación que conoce Prisma/SQLite para el agregado Sesion. */
-@Injectable()
+/** Adaptador de salida para el agregado Sesion. */
 export class PrismaSesionRepository implements ISesionRepository {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: Prisma.TransactionClient,
+    private readonly mapper: IdentidadMapper,
+  ) {}
 
-  async buscarConUsuarioYEmpleado(
-    sesionId: number,
-  ): Promise<SesionConUsuarioRegistro | null> {
-    return this.prisma.sesion.findUnique({
+  async buscarPorId(sesionId: number): Promise<Sesion | null> {
+    const registro = await this.prisma.sesion.findUnique({
       where: { id: sesionId },
       include: {
         usuario: {
@@ -19,5 +19,6 @@ export class PrismaSesionRepository implements ISesionRepository {
         },
       },
     });
+    return registro ? this.mapper.mapearSesion(registro) : null;
   }
 }

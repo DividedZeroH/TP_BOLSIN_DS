@@ -12,6 +12,12 @@ export type CodigoOpcionRecepcion =
 export interface OpcionRecepcionVista {
   codigo: CodigoOpcionRecepcion;
   descripcion: string;
+  /**
+   * Lo informa el backend: las situaciones de flujo alternativo existen en el
+   * analisis pero todavia no estan implementadas, y no deben poder
+   * confirmarse desde la pantalla.
+   */
+  implementado: boolean;
 }
 
 export interface UsuarioLogueadoVista {

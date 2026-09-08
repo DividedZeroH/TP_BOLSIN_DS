@@ -187,6 +187,26 @@ th {
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.3);
 }
 
+.option-disabled,
+.option-button:disabled {
+  background: #e3e9f1;
+  color: #56657f;
+  cursor: not-allowed;
+}
+
+.option-badge {
+  display: inline-block;
+  margin-left: 10px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: #c8d4e3;
+  color: #33455f;
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  vertical-align: middle;
+}
+
 .confirm-panel {
   margin-top: 20px;
   padding: 24px;

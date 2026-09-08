@@ -1,54 +1,46 @@
-import { BolsinResumenRegistro } from './bolsin-resumen.registro';
-import { BolsinCompletoRegistro } from './bolsin-completo.registro';
+import { Bolsin } from '../../../domain/bolsin';
+import { Documentacion } from '../../../domain/documentacion';
+import { Empleado } from '../../../../identidad';
+import { Estado } from '../../../../catalogo';
 
 /** Token de inyección DIP para el agregado Bolsin. */
 export const BOLSIN_REPOSITORY = 'BOLSIN_REPOSITORY';
 
 /**
- * Abstracción del agregado Bolsin. El gestor de aplicación trabaja contra
- * esta interfaz (DIP); `PrismaBolsinRepository` es el único punto que conoce
- * Prisma/SQLite y el include necesario para reconstruir el agregado.
+ * Puerto de salida del agregado Bolsin.
+ *
+ * Está definido enteramente en lenguaje de dominio: recibe y devuelve
+ * entidades (`Bolsin`, `Estado`, `Empleado`, `Documentacion`), nunca filas ni
+ * tipos de Prisma. Reconstruir el agregado desde la base y traducir las
+ * órdenes a SQL es responsabilidad del adaptador que lo implemente.
  */
 export interface IBolsinRepository {
-  buscarEnviadosPorComisionDestino(
-    comisionMedicaId: number,
-  ): Promise<BolsinResumenRegistro[]>;
+  /** Bolsines cuyo cambio de estado actual responde `sosEnviado()`. */
+  buscarEnviadosPorComisionDestino(comisionMedicaId: number): Promise<Bolsin[]>;
 
-  buscarCompletoPorIdYDestino(
+  buscarPorIdYComisionDestino(
     bolsinId: number,
     comisionMedicaDestinoId: number,
-  ): Promise<BolsinCompletoRegistro | null>;
+  ): Promise<Bolsin | null>;
 
-  buscarCompletoPorIdEnTx(
-    tx: unknown,
-    bolsinId: number,
-  ): Promise<BolsinCompletoRegistro | null>;
+  buscarPorId(bolsinId: number): Promise<Bolsin | null>;
 
   /** Cierra el cambio de estado abierto del bolsín y abre uno nuevo. */
   registrarCambioEstadoBolsin(
-    tx: unknown,
-    bolsinId: number,
-    estadoId: number,
-    empleadoId: number,
+    bolsin: Bolsin,
+    estado: Estado,
+    empleado: Empleado,
     fechaHora: Date,
   ): Promise<void>;
 
-  /** Actualiza el estado de todos los remitos del bolsín. */
-  actualizarEstadoRemitos(
-    tx: unknown,
-    bolsinId: number,
-    estadoId: number,
-  ): Promise<void>;
+  /** Refleja el estado de todos los remitos del bolsín. */
+  actualizarEstadoRemitos(bolsin: Bolsin, estado: Estado): Promise<void>;
 
   /** Cierra el cambio de estado abierto de una documentación y abre uno nuevo. */
   registrarCambioEstadoDocumentacion(
-    tx: unknown,
-    documentacionId: number,
-    estadoId: number,
-    empleadoId: number,
+    documentacion: Documentacion,
+    estado: Estado,
+    empleado: Empleado,
     fechaHora: Date,
   ): Promise<void>;
-
-  /** Ejecuta `fn` dentro de una transacción Prisma y devuelve su resultado. */
-  ejecutarEnTransaccion<T>(fn: (tx: unknown) => Promise<T>): Promise<T>;
 }

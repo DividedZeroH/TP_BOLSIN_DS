@@ -2,22 +2,37 @@ import {
   Body,
   Controller,
   Get,
+  Inject,
   Param,
   ParseIntPipe,
   Post,
   Query,
+  UseFilters,
 } from '@nestjs/common';
-import { GestorRegistrarRecepcionBolsin } from './gestor-registrar-recepcion-bolsin.service';
-import { ConfirmarRecepcionBolsinDto } from './recepcion-bolsin.modelos';
+import {
+  IRegistrarRecepcionBolsin,
+  REGISTRAR_RECEPCION_BOLSIN,
+} from '../../application/ports/in/registrar-recepcion-bolsin.port';
+import { ConfirmarRecepcionBolsinDto } from '../../application/dto/recepcion-bolsin.modelos';
+import { ErroresRecepcionBolsinFilter } from './errores-recepcion-bolsin.filter';
 
-/** Adaptador HTTP: traduce solicitudes web a mensajes dirigidos al Gestor. */
+/**
+ * Adaptador de entrada HTTP: traduce solicitudes web a mensajes del puerto de
+ * entrada. Depende de la interfaz `IRegistrarRecepcionBolsin`, no del gestor
+ * concreto, así que el caso de uso podría exponerse por otro transporte sin
+ * tocar la capa de aplicación.
+ */
 @Controller('recepciones-bolsines')
+@UseFilters(ErroresRecepcionBolsinFilter)
 export class RecepcionBolsinController {
-  constructor(private readonly gestor: GestorRegistrarRecepcionBolsin) {}
+  constructor(
+    @Inject(REGISTRAR_RECEPCION_BOLSIN)
+    private readonly recepcion: IRegistrarRecepcionBolsin,
+  ) {}
 
   @Get('iniciar')
   iniciar(@Query('sesionId', ParseIntPipe) sesionId: number) {
-    return this.gestor.nuevaRecepcionBolsin(sesionId);
+    return this.recepcion.nuevaRecepcionBolsin(sesionId);
   }
 
   @Get(':bolsinId')
@@ -25,7 +40,7 @@ export class RecepcionBolsinController {
     @Param('bolsinId', ParseIntPipe) bolsinId: number,
     @Query('sesionId', ParseIntPipe) sesionId: number,
   ) {
-    return this.gestor.tomarBolsin(sesionId, bolsinId);
+    return this.recepcion.tomarBolsin(sesionId, bolsinId);
   }
 
   @Post(':bolsinId/confirmar')
@@ -33,8 +48,8 @@ export class RecepcionBolsinController {
     @Param('bolsinId', ParseIntPipe) bolsinId: number,
     @Body() dto: ConfirmarRecepcionBolsinDto,
   ) {
-    this.gestor.tomarOpcion(dto.opcion);
-    return this.gestor.tomarConfirmacion(
+    this.recepcion.tomarOpcion(dto.opcion);
+    return this.recepcion.tomarConfirmacion(
       Number(dto.sesionId),
       bolsinId,
       dto.confirmacion,

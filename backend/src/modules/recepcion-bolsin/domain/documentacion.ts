@@ -1,8 +1,8 @@
-import { Empleado } from './empleado';
-import { Estado } from './estado';
+import { Empleado } from '../../identidad';
+import { Estado } from '../../catalogo';
 import { TipoDocumentacion } from './tipoDocumentacion';
 import { CambioEstadoDocumentacion } from './cambioEstadoDocumentacion';
-import { ComisionMedica } from './comisionMedica';
+import { ComisionMedica } from '../../organizacion';
 
 export class Documentacion {
   constructor(

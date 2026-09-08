@@ -1,9 +1,9 @@
 
-import { Empleado } from './empleado';
-import { Estado } from './estado';
+import { Empleado } from '../../identidad';
+import { Estado } from '../../catalogo';
 import { DetalleRemito } from './detalleRemito';
 import { Documentacion } from './documentacion';
-import { ComisionMedica } from './comisionMedica';
+import { ComisionMedica } from '../../organizacion';
 
 export class Remito {
   constructor(

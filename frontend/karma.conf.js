@@ -23,6 +23,13 @@ module.exports = function (config) {
     },
     reporters: ['progress', 'kjhtml'],
     browsers: ['ChromeHeadless'],
+    // El contenedor de CI corre como root y sin sandbox de kernel.
+    customLaunchers: {
+      ChromeHeadlessCI: {
+        base: 'ChromeHeadless',
+        flags: ['--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage'],
+      },
+    },
     restartOnFileChange: true,
   });
 };

@@ -1,28 +1,17 @@
-import { EstadoRegistro } from './estado.registro';
+import { Estado } from '../../domain/estado';
 
 /** Token de inyección DIP: el gestor depende de esta interfaz, no de Prisma. */
 export const ESTADO_REPOSITORY = 'ESTADO_REPOSITORY';
 
 /**
- * Abstracción de acceso al catálogo Estado. El gestor solo conoce esta
- * interfaz; quién la implementa (Prisma, en memoria para tests, etc.) es un
- * detalle de infraestructura (DIP).
+ * Puerto de salida del catálogo Estado. Habla en lenguaje de dominio: devuelve
+ * `Estado`, no filas de la base. Tampoco recibe un handle de transacción: la
+ * atomicidad se resuelve con el puerto `IUnidadDeTrabajo`, que entrega
+ * repositorios ya ligados a la transacción.
  */
 export interface IEstadoRepository {
-  /** Misma clave natural Nombre+Ambito, dentro de una transacción abierta por el gestor. */
-  buscarPorNombreYAmbitoEnTx(
-    tx: unknown,
-    nombre: string,
-    ambito: string,
-  ): Promise<EstadoRegistro | null>;
+  buscarPorNombreYAmbito(nombre: string, ambito: string): Promise<Estado | null>;
 
-  /**
-   * Busca el primer Estado que cumpla Nombre+Ambito y además sea el estado
-   * "actual" del ámbito Bolsin (SosAmbitoBolsin = true), usado para validar
-   * el estado Recibido del bolsín.
-   */
-  buscarEstadoBolsinPorNombreEnTx(
-    tx: unknown,
-    nombre: string,
-  ): Promise<EstadoRegistro | null>;
+  /** Estado del ámbito Bolsin identificado por su nombre. */
+  buscarEstadoBolsinPorNombre(nombre: string): Promise<Estado | null>;
 }

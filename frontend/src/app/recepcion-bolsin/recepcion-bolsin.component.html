@@ -90,15 +90,31 @@
     <span class="step-number">4</span>
     <div class="step-content">
       <h2>Registrar situacion</h2>
-      <div class="option-list" role="listbox" aria-label="Situaciones de recepcion">
+
+      <p *ngIf="cargandoDetalle" class="state-message">Cargando situaciones...</p>
+
+      <div
+        *ngIf="opcionesRecepcion.length > 0"
+        class="option-list"
+        role="listbox"
+        aria-label="Situaciones de recepcion"
+      >
         <button
           *ngFor="let opcion of opcionesRecepcion"
           type="button"
           class="option-button"
           [class.option-selected]="opcionSeleccionada === opcion.codigo"
-          (click)="seleccionarOpcion(opcion.codigo)"
+          [class.option-disabled]="!opcion.implementado"
+          [disabled]="!opcion.implementado"
+          [title]="
+            opcion.implementado
+              ? opcion.descripcion
+              : 'Flujo alternativo no implementado en esta entrega'
+          "
+          (click)="seleccionarOpcion(opcion)"
         >
           {{ opcion.descripcion }}
+          <span *ngIf="!opcion.implementado" class="option-badge">No implementado</span>
         </button>
       </div>
     </div>

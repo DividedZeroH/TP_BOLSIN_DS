@@ -1,4 +1,5 @@
 import { CommonModule } from '@angular/common';
+import { HttpErrorResponse } from '@angular/common/http';
 import { Component, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
 import {
@@ -6,10 +7,6 @@ import {
   CodigoOpcionRecepcion,
   DetalleBolsinVista,
   InicioRecepcion,
-  OPCION_CONTENIDO_IGUAL,
-  OPCION_DOCUMENTACION_NO_CORRESPONDE,
-  OPCION_FALTA_DOCUMENTACION,
-  OPCION_REDIRIGIR_OTRA_AREA,
   OpcionRecepcionVista,
 } from './recepcion-bolsin.modelos';
 import { RecepcionBolsinService } from './recepcion-bolsin.service';
@@ -30,26 +27,6 @@ interface ModalRecepcion {
 })
 export class RecepcionBolsinComponent implements OnInit {
   readonly sesionId = 1;
-  readonly opcionesRecepcion: OpcionRecepcionVista[] = [
-    {
-      codigo: OPCION_CONTENIDO_IGUAL,
-      descripcion: 'El contenido del bolsin es igual al registrado.',
-    },
-    {
-      codigo: OPCION_FALTA_DOCUMENTACION,
-      descripcion:
-        'No se recibe toda la documentacion asociada a los remitos que contiene el bolsin.',
-    },
-    {
-      codigo: OPCION_DOCUMENTACION_NO_CORRESPONDE,
-      descripcion:
-        'Existe documentacion que no corresponde al destino (CM del usuario logueado).',
-    },
-    {
-      codigo: OPCION_REDIRIGIR_OTRA_AREA,
-      descripcion: 'La documentacion se debe redirigir a otra area.',
-    },
-  ];
 
   inicio?: InicioRecepcion;
   bolsines: BolsinVista[] = [];
@@ -86,11 +63,23 @@ export class RecepcionBolsinComponent implements OnInit {
     return 'Usuario logueado';
   }
 
-  get opcionSeleccionadaTexto(): string {
-    return (
-      this.opcionesRecepcion.find((opcion) => opcion.codigo === this.opcionSeleccionada)
-        ?.descripcion ?? ''
+  /**
+   * Las situaciones las publica el backend junto con el detalle del bolsin,
+   * incluyendo cuales estan implementadas. La pantalla no mantiene su propia
+   * lista para no poder ofrecer opciones que el gestor va a rechazar.
+   */
+  get opcionesRecepcion(): OpcionRecepcionVista[] {
+    return this.detalle?.opciones ?? [];
+  }
+
+  get opcionSeleccionadaVista(): OpcionRecepcionVista | undefined {
+    return this.opcionesRecepcion.find(
+      (opcion) => opcion.codigo === this.opcionSeleccionada,
     );
+  }
+
+  get opcionSeleccionadaTexto(): string {
+    return this.opcionSeleccionadaVista?.descripcion ?? '';
   }
 
   cargarInicio(): void {
@@ -130,8 +119,11 @@ export class RecepcionBolsinComponent implements OnInit {
     });
   }
 
-  seleccionarOpcion(codigo: CodigoOpcionRecepcion): void {
-    this.opcionSeleccionada = codigo;
+  seleccionarOpcion(opcion: OpcionRecepcionVista): void {
+    if (!opcion.implementado) {
+      return;
+    }
+    this.opcionSeleccionada = opcion.codigo;
   }
 
   cancelarConfirmacion(): void {
@@ -155,7 +147,8 @@ export class RecepcionBolsinComponent implements OnInit {
   }
 
   confirmarRecepcion(): void {
-    if (!this.bolsinSeleccionado || !this.opcionSeleccionada) {
+    const opcion = this.opcionSeleccionadaVista;
+    if (!this.bolsinSeleccionado || !opcion) {
       this.modal = {
         tipo: 'error',
         titulo: 'No se pudo confirmar',
@@ -164,24 +157,34 @@ export class RecepcionBolsinComponent implements OnInit {
       return;
     }
 
-    if (this.opcionSeleccionada !== OPCION_CONTENIDO_IGUAL) {
-      this.registrarExito(this.bolsinSeleccionado.id);
+    // Guarda defensiva: el boton ya viene deshabilitado, pero la recepcion no
+    // debe darse por registrada si la situacion no tiene flujo implementado.
+    if (!opcion.implementado) {
+      this.modal = {
+        tipo: 'error',
+        titulo: 'Situacion no implementada',
+        mensaje:
+          'Esta situacion corresponde a un flujo alternativo que todavia no esta implementado, por lo que no puede registrarse.',
+      };
       return;
     }
 
+    const bolsinId = this.bolsinSeleccionado.id;
     this.confirmando = true;
-    this.recepcionService
-      .confirmar(this.sesionId, this.bolsinSeleccionado.id, this.opcionSeleccionada)
-      .subscribe({
-        next: () => {
-          this.confirmando = false;
-          this.registrarExito(this.bolsinSeleccionado?.id);
-        },
-        error: () => {
-          this.confirmando = false;
-          this.registrarExito(this.bolsinSeleccionado?.id);
-        },
-      });
+    this.recepcionService.confirmar(this.sesionId, bolsinId, opcion.codigo).subscribe({
+      next: () => {
+        this.confirmando = false;
+        this.registrarExito(bolsinId);
+      },
+      error: (error: unknown) => {
+        this.confirmando = false;
+        this.modal = {
+          tipo: 'error',
+          titulo: 'No se pudo confirmar',
+          mensaje: this.mensajeDeError(error),
+        };
+      },
+    });
   }
 
   cerrarModal(): void {
@@ -202,6 +205,17 @@ export class RecepcionBolsinComponent implements OnInit {
 
   trackByDocumentacion(_: number, documentacion: { id: number }): number {
     return documentacion.id;
+  }
+
+  /** Prioriza el mensaje que devuelve el backend (Nest) sobre uno generico. */
+  private mensajeDeError(error: unknown): string {
+    const cuerpo = (error as HttpErrorResponse | undefined)?.error as
+      | { message?: string | string[] }
+      | undefined;
+    const mensaje = Array.isArray(cuerpo?.message)
+      ? cuerpo?.message[0]
+      : cuerpo?.message;
+    return mensaje ?? 'No fue posible registrar la recepcion. Intenta nuevamente.';
   }
 
   private registrarExito(bolsinId?: number): void {

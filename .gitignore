@@ -6,4 +6,4 @@ backend/prisma/*.db
 backend/prisma/*.db-journal
 *.log
 backend/.env
-
+.claude/

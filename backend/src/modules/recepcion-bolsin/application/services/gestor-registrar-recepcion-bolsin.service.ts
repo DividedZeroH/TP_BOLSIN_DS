@@ -1,58 +1,60 @@
+import { ComisionMedica } from '../../../organizacion';
+import { Empleado } from '../../../identidad';
+import { Estado } from '../../../catalogo';
+import { IEstadoRepository } from '../../../catalogo';
+import { ISesionRepository } from '../../../identidad';
+import { Bolsin } from '../../domain/bolsin';
+import { Documentacion } from '../../domain/documentacion';
+import { Remito } from '../../domain/remito';
 import {
-  BadRequestException,
-  Inject,
-  Injectable,
-  Logger,
-  NotFoundException,
-} from '@nestjs/common';
-import { Estado } from '../dominio/estado';
-import { Empleado } from '../dominio/empleado';
-import { ComisionMedica } from '../dominio/comisionMedica';
-import { Remito } from '../dominio/remito';
-import { Documentacion } from '../dominio/documentacion';
-import { Bolsin } from '../dominio/bolsin';
-import { BolsinMapper } from './bolsin.mapper';
-import {
-  BOLSIN_REPOSITORY,
-  IBolsinRepository,
-} from './repositorios/bolsin.repository';
-import {
-  ESTADO_REPOSITORY,
-  IEstadoRepository,
-} from './repositorios/estado.repository';
-import {
-  ISesionRepository,
-  SESION_REPOSITORY,
-} from './repositorios/sesion.repository';
+  EntidadNoEncontradaError,
+  OperacionInvalidaError,
+} from '../errors/recepcion-bolsin.errors';
+import { IRegistrarRecepcionBolsin } from '../ports/in/registrar-recepcion-bolsin.port';
+import { IBolsinRepository } from '../ports/out/bolsin.repository';
+import { INotificadorRecepcion } from '../ports/out/notificador-recepcion';
+import { IUnidadDeTrabajo } from '../ports/out/unidad-de-trabajo';
 import { MANEJADORES_OPCION_RECEPCION } from './opcion-recepcion.handlers';
 import {
-  OPCION_CONTENIDO_IGUAL,
+  DetalleBolsinRecepcion,
+  InicioRecepcionBolsin,
+  OPCIONES_RECEPCION,
   OpcionRecepcion,
+  OpcionRecepcionDisponible,
   ResultadoRecepcionBolsin,
-} from './recepcion-bolsin.modelos';
+} from '../dto/recepcion-bolsin.modelos';
 
 /**
- * Clase Control/Gestor del análisis. Coordina exactamente el flujo normal y
- * mantiene las decisiones de negocio fuera del controlador HTTP. El acceso a
- * datos queda detrás de interfaces de Repository (DIP); este gestor no
- * conoce Prisma ni SQLite.
+ * Clase Control/Gestor del análisis: implementa el puerto de entrada del CU28.
+ *
+ * Es el centro del hexágono junto con el dominio, y no depende de ningún
+ * framework: sin decoradores de NestJS, sin excepciones HTTP y sin logger.
+ * Solo conoce entidades de dominio, puertos y errores propios. El cableado con
+ * NestJS ocurre en `recepcion-bolsin.module.ts`, que es el composition root.
  */
-@Injectable()
-export class GestorRegistrarRecepcionBolsin {
-  private readonly logger = new Logger(GestorRegistrarRecepcionBolsin.name);
-
+export class GestorRegistrarRecepcionBolsin implements IRegistrarRecepcionBolsin {
   constructor(
-    @Inject(BOLSIN_REPOSITORY) private readonly bolsinRepository: IBolsinRepository,
-    @Inject(ESTADO_REPOSITORY) private readonly estadoRepository: IEstadoRepository,
-    @Inject(SESION_REPOSITORY) private readonly sesionRepository: ISesionRepository,
-    private readonly mapper: BolsinMapper,
+    private readonly bolsinRepository: IBolsinRepository,
+    private readonly sesionRepository: ISesionRepository,
+    private readonly unidadDeTrabajo: IUnidadDeTrabajo,
+    private readonly notificador: INotificadorRecepcion,
   ) {}
 
   /** Inicia el CU obteniendo usuario, comisión y bolsines enviados a destino. */
-  async nuevaRecepcionBolsin(sesionId: number) {
+  async nuevaRecepcionBolsin(sesionId: number): Promise<InicioRecepcionBolsin> {
     const empleado = await this.buscarUsuarioLogueado(sesionId);
     const comision = this.buscarComisionMedicaUsuario(empleado);
     const bolsines = await this.buscarBolsinEnviadoCMUsuario(comision.id);
+
+    // Los bolsines llegan como agregados de dominio, así que la validación la
+    // responden ellos mismos (Expert), tal como marca el LoopBolsin de la
+    // secuencia.
+    const validados = bolsines.filter(
+      (bolsin) =>
+        bolsin.sosEnviado() && this.validarComisionMedicaBolsin(bolsin, comision),
+    );
+    const precintos = this.buscarPrecintoBolsin(validados);
+    const origenes = this.buscarComisionMedicaBolsin(validados);
 
     return {
       usuarioLogueado: {
@@ -61,10 +63,13 @@ export class GestorRegistrarRecepcionBolsin {
         email: empleado.email,
       },
       comisionMedica: { id: comision.id, nombre: comision.getNombre() },
-      bolsines: bolsines.map((bolsin) => ({
+      bolsines: validados.map((bolsin, indice) => ({
         id: bolsin.id,
-        numeroPrecinto: bolsin.numeroPrecinto,
-        comisionMedicaOrigen: bolsin.comisionMedicaOrigen,
+        numeroPrecinto: precintos[indice],
+        comisionMedicaOrigen: {
+          id: origenes[indice].id,
+          nombre: origenes[indice].getNombre(),
+        },
       })),
     };
   }
@@ -80,15 +85,15 @@ export class GestorRegistrarRecepcionBolsin {
    * misma indicada en la secuencia.
    */
   async buscarUsuarioLogueado(sesionId: number): Promise<Empleado> {
-    const registro = await this.sesionRepository.buscarConUsuarioYEmpleado(sesionId);
-    if (!registro) {
-      throw new NotFoundException('No se encontró la sesión indicada.');
+    const sesion = await this.sesionRepository.buscarPorId(sesionId);
+    if (!sesion) {
+      throw new EntidadNoEncontradaError('No se encontró la sesión indicada.');
     }
-    return this.mapper.mapearEmpleado(registro.usuario.empleado);
+    return sesion.getUsuarioLogueado().getEmpleado();
   }
 
   /** Consulta únicamente bolsines cuyo cambio actual responde sosEnviado(). */
-  async buscarBolsinEnviadoCMUsuario(comisionMedicaId: number) {
+  async buscarBolsinEnviadoCMUsuario(comisionMedicaId: number): Promise<Bolsin[]> {
     return this.bolsinRepository.buscarEnviadosPorComisionDestino(comisionMedicaId);
   }
 
@@ -108,20 +113,23 @@ export class GestorRegistrarRecepcionBolsin {
   }
 
   /** Recupera el agregado seleccionado y prepara la información de pantalla. */
-  async tomarBolsin(sesionId: number, bolsinId: number) {
+  async tomarBolsin(
+    sesionId: number,
+    bolsinId: number,
+  ): Promise<DetalleBolsinRecepcion> {
     const empleado = await this.buscarUsuarioLogueado(sesionId);
     const comision = this.buscarComisionMedicaUsuario(empleado);
-    const registro = await this.bolsinRepository.buscarCompletoPorIdYDestino(
+    const bolsin = await this.bolsinRepository.buscarPorIdYComisionDestino(
       bolsinId,
       comision.id,
     );
-    if (!registro) {
-      throw new NotFoundException('No se encontró el bolsín seleccionado.');
+    if (!bolsin) {
+      throw new EntidadNoEncontradaError('No se encontró el bolsín seleccionado.');
     }
-
-    const bolsin = this.mapper.mapearBolsin(registro);
     if (!this.validarComisionMedicaBolsin(bolsin, comision) || !bolsin.sosEnviado()) {
-      throw new NotFoundException('El bolsín no está disponible para esta comisión.');
+      throw new EntidadNoEncontradaError(
+        'El bolsín no está disponible para esta comisión.',
+      );
     }
     const remitos = this.buscarRemitoBolsin(bolsin);
 
@@ -137,13 +145,25 @@ export class GestorRegistrarRecepcionBolsin {
           asunto: documentacion.getAsunto(),
         })),
       })),
-      opciones: [
-        {
-          codigo: OPCION_CONTENIDO_IGUAL,
-          descripcion: 'El contenido del bolsín es igual al registrado.',
-        },
-      ],
+      opciones: this.buscarOpcionesRecepcion(),
     };
+  }
+
+  /**
+   * Corresponde a `mostrarOpcionesRecepcionParaSeleccion()` de la secuencia.
+   * Devuelve las cuatro situaciones del análisis con su marca `implementado`,
+   * para que la pantalla muestre el abanico completo pero solo habilite las
+   * que `tomarOpcion()` va a aceptar.
+   */
+  buscarOpcionesRecepcion(): OpcionRecepcionDisponible[] {
+    return OPCIONES_RECEPCION.map((codigo) => {
+      const manejador = MANEJADORES_OPCION_RECEPCION[codigo];
+      return {
+        codigo: manejador.opcion,
+        descripcion: manejador.descripcion,
+        implementado: manejador.implementado,
+      };
+    });
   }
 
   buscarRemitoBolsin(bolsin: Bolsin): Remito[] {
@@ -158,15 +178,16 @@ export class GestorRegistrarRecepcionBolsin {
   tomarOpcion(opcion: OpcionRecepcion): OpcionRecepcion {
     const manejador = MANEJADORES_OPCION_RECEPCION[opcion];
     if (!manejador?.implementado) {
-      throw new BadRequestException('La opción no pertenece al flujo normal implementado.');
+      throw new OperacionInvalidaError(
+        'La opción no pertenece al flujo normal implementado.',
+      );
     }
     return manejador.opcion;
   }
 
   /**
-   * Confirma el CU. La transacción la abre el repository (`ejecutarEnTransaccion`)
-   * para que ninguna entidad quede en un estado parcial si una escritura
-   * inesperada falla.
+   * Confirma el CU dentro de una unidad de trabajo, para que ninguna entidad
+   * quede en un estado parcial si una escritura falla.
    */
   async tomarConfirmacion(
     sesionId: number,
@@ -174,35 +195,36 @@ export class GestorRegistrarRecepcionBolsin {
     confirmacion: boolean,
   ): Promise<ResultadoRecepcionBolsin> {
     if (confirmacion !== true) {
-      throw new BadRequestException('La confirmación es requerida.');
+      throw new OperacionInvalidaError('La confirmación es requerida.');
     }
     const empleado = await this.buscarUsuarioLogueado(sesionId);
     const fechaHora = this.getFechaHoraActual();
 
-    await this.bolsinRepository.ejecutarEnTransaccion(async (tx) => {
-      const registro = await this.bolsinRepository.buscarCompletoPorIdEnTx(tx, bolsinId);
-      if (!registro) {
-        throw new NotFoundException('No se encontró el bolsín seleccionado.');
+    await this.unidadDeTrabajo.ejecutar(async ({ bolsines, estados }) => {
+      const bolsin = await bolsines.buscarPorId(bolsinId);
+      if (!bolsin) {
+        throw new EntidadNoEncontradaError('No se encontró el bolsín seleccionado.');
       }
-      const bolsin = this.mapper.mapearBolsin(registro);
       if (!this.validarComisionMedicaBolsin(bolsin, empleado.getComisionMedica())) {
-        throw new NotFoundException('El bolsín no pertenece a la comisión del usuario.');
+        throw new EntidadNoEncontradaError(
+          'El bolsín no pertenece a la comisión del usuario.',
+        );
       }
 
-      const estadoRecibido = await this.buscarEstadoRecibidoBolsin(tx);
-      const estadoRemito = await this.buscarEstadoRecibidoYAceptado(tx);
-      const estadoAceptada = await this.buscarEstadoAceptadaDocumentacion(tx);
+      const estadoRecibido = await this.buscarEstadoRecibidoBolsin(estados);
+      const estadoRemito = await this.buscarEstadoRecibidoYAceptado(estados);
+      const estadoAceptada = await this.buscarEstadoAceptadaDocumentacion(estados);
 
       await this.registrarCambioEstadoBolsin(
-        tx,
+        bolsines,
         bolsin,
         estadoRecibido,
         empleado,
         fechaHora,
       );
-      await this.actualizarEstadoRemito(tx, bolsin, estadoRemito);
+      await this.actualizarEstadoRemito(bolsines, bolsin, estadoRemito);
       await this.actualizarDocumentacion(
-        tx,
+        bolsines,
         bolsin,
         estadoAceptada,
         empleado,
@@ -216,14 +238,17 @@ export class GestorRegistrarRecepcionBolsin {
     return this.finDelCU(bolsinId, fechaHora);
   }
 
-  async buscarEstadoRecibidoBolsin(tx: unknown): Promise<Estado> {
-    const registro = await this.estadoRepository.buscarEstadoBolsinPorNombreEnTx(tx, 'Recibido');
-    if (!registro) {
-      throw new NotFoundException('No se configuró el estado Recibido del bolsín.');
+  async buscarEstadoRecibidoBolsin(estados: IEstadoRepository): Promise<Estado> {
+    const estado = await estados.buscarEstadoBolsinPorNombre('Recibido');
+    if (!estado) {
+      throw new EntidadNoEncontradaError(
+        'No se configuró el estado Recibido del bolsín.',
+      );
     }
-    const estado = this.mapper.mapearEstado(registro);
     if (!estado.sosAmbitoBolsin() || !estado.sosRecibido()) {
-      throw new NotFoundException('El estado Recibido no pertenece al ámbito Bolsin.');
+      throw new EntidadNoEncontradaError(
+        'El estado Recibido no pertenece al ámbito Bolsin.',
+      );
     }
     return estado;
   }
@@ -233,83 +258,83 @@ export class GestorRegistrarRecepcionBolsin {
   }
 
   async registrarCambioEstadoBolsin(
-    tx: unknown,
+    bolsines: IBolsinRepository,
     bolsin: Bolsin,
     estado: Estado,
     empleado: Empleado,
     fechaHora: Date,
   ): Promise<void> {
-    // Primero se aplica la regla del dominio y luego se refleja en SQLite.
+    // Primero se aplica la regla del dominio y luego se persiste el agregado.
     bolsin.registrarCambioEstadoBolsin(estado, empleado, fechaHora);
-    await this.bolsinRepository.registrarCambioEstadoBolsin(
-      tx,
-      bolsin.id,
-      estado.id,
-      empleado.id,
-      fechaHora,
-    );
+    await bolsines.registrarCambioEstadoBolsin(bolsin, estado, empleado, fechaHora);
   }
 
-  async buscarEstadoRecibidoYAceptado(tx: unknown): Promise<Estado> {
-    const registro = await this.estadoRepository.buscarPorNombreYAmbitoEnTx(
-      tx,
+  async buscarEstadoRecibidoYAceptado(estados: IEstadoRepository): Promise<Estado> {
+    const estado = await estados.buscarPorNombreYAmbito(
       'RecibidoYAceptado',
       'REMITO',
     );
-    if (!registro) {
-      throw new NotFoundException('No se configuró RecibidoYAceptado para remitos.');
+    if (!estado) {
+      throw new EntidadNoEncontradaError(
+        'No se configuró RecibidoYAceptado para remitos.',
+      );
     }
-    const estado = this.mapper.mapearEstado(registro);
     if (!estado.sosAmbitoRemito() || !estado.sosRecibidoYAceptado()) {
-      throw new NotFoundException('El estado no corresponde a remitos recibidos.');
+      throw new EntidadNoEncontradaError(
+        'El estado no corresponde a remitos recibidos.',
+      );
     }
     return estado;
   }
 
-  async buscarEstadoAceptadaDocumentacion(tx: unknown): Promise<Estado> {
-    const registro = await this.estadoRepository.buscarPorNombreYAmbitoEnTx(
-      tx,
-      'Aceptada',
-      'DOCUMENTACION',
-    );
-    if (!registro) {
-      throw new NotFoundException('No se configuró el estado Aceptada.');
+  async buscarEstadoAceptadaDocumentacion(
+    estados: IEstadoRepository,
+  ): Promise<Estado> {
+    const estado = await estados.buscarPorNombreYAmbito('Aceptada', 'DOCUMENTACION');
+    if (!estado) {
+      throw new EntidadNoEncontradaError('No se configuró el estado Aceptada.');
     }
-    return this.mapper.mapearEstado(registro);
+    if (!estado.sosAmbitoDocumentacion() || !estado.sosAceptada()) {
+      throw new EntidadNoEncontradaError(
+        'El estado Aceptada no pertenece al ámbito Documentacion.',
+      );
+    }
+    return estado;
   }
 
   async actualizarEstadoRemito(
-    tx: unknown,
+    bolsines: IBolsinRepository,
     bolsin: Bolsin,
     estado: Estado,
   ): Promise<void> {
     bolsin.actualizarEstadoRemito(estado);
-    await this.bolsinRepository.actualizarEstadoRemitos(tx, bolsin.id, estado.id);
+    await bolsines.actualizarEstadoRemitos(bolsin, estado);
   }
 
   async actualizarDocumentacion(
-    tx: unknown,
+    bolsines: IBolsinRepository,
     bolsin: Bolsin,
     estado: Estado,
     empleado: Empleado,
     fechaHora: Date,
   ): Promise<void> {
     bolsin.actualizarDocumentacion(estado, empleado, fechaHora);
-    const documentaciones = bolsin.buscarDocumentacionBolsin();
-    for (const documentacion of documentaciones) {
-      await this.bolsinRepository.registrarCambioEstadoDocumentacion(
-        tx,
-        documentacion.id,
-        estado.id,
-        empleado.id,
+    for (const documentacion of this.buscarDocumentacionBolsin(bolsin)) {
+      await bolsines.registrarCambioEstadoDocumentacion(
+        documentacion,
+        estado,
+        empleado,
         fechaHora,
       );
     }
   }
 
-  /** Punto explícito de integración con el CU 29, no modelado en esta entrega. */
+  /**
+   * `<<include>>` al CU29 del diagrama de secuencia. Se resuelve a través de un
+   * puerto: el gestor anuncia el hecho y no sabe quién lo escucha.
+   */
   llamarCU29(bolsinId: number): void {
-    this.logger.log(`CU29 solicitado para el bolsín ${bolsinId}.`);
+    this.notificador.notificarRecepcionRegistrada(bolsinId);
   }
 
   finDelCU(bolsinId: number, fechaHora: Date): ResultadoRecepcionBolsin {

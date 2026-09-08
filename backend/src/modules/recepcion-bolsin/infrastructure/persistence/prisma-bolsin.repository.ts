@@ -1,9 +1,10 @@
-import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { PrismaService } from '../../prisma/prisma.service';
-import { IBolsinRepository } from './bolsin.repository';
-import { BolsinResumenRegistro } from './bolsin-resumen.registro';
-import { BolsinCompletoRegistro } from './bolsin-completo.registro';
+import { Empleado } from '../../../identidad';
+import { Estado } from '../../../catalogo';
+import { IBolsinRepository } from '../../application/ports/out/bolsin.repository';
+import { Bolsin } from '../../domain/bolsin';
+import { Documentacion } from '../../domain/documentacion';
+import { BolsinMapper } from './bolsin.mapper';
 
 /**
  * Incluye todas las relaciones que forman el agregado Bolsin. La constante se
@@ -38,15 +39,21 @@ const bolsinCompletoInclude = Prisma.validator<Prisma.BolsinInclude>()({
   },
 });
 
-/** Única implementación que conoce Prisma/SQLite para el agregado Bolsin. */
-@Injectable()
+/**
+ * Adaptador de salida del agregado Bolsin: único punto que conoce Prisma y
+ * SQLite. Recibe el cliente por constructor para que la unidad de trabajo
+ * pueda instanciarlo ligado a una transacción abierta.
+ */
 export class PrismaBolsinRepository implements IBolsinRepository {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: Prisma.TransactionClient,
+    private readonly mapper: BolsinMapper,
+  ) {}
 
   async buscarEnviadosPorComisionDestino(
     comisionMedicaId: number,
-  ): Promise<BolsinResumenRegistro[]> {
-    return this.prisma.bolsin.findMany({
+  ): Promise<Bolsin[]> {
+    const registros = await this.prisma.bolsin.findMany({
       where: {
         comisionMedicaDestinoId: comisionMedicaId,
         cambiosEstado: {
@@ -56,90 +63,75 @@ export class PrismaBolsinRepository implements IBolsinRepository {
           },
         },
       },
-      include: { comisionMedicaOrigen: true },
+      include: bolsinCompletoInclude,
       orderBy: { numeroPrecinto: 'asc' },
     });
+    return registros.map((registro) => this.mapper.mapearBolsin(registro));
   }
 
-  async buscarCompletoPorIdYDestino(
+  async buscarPorIdYComisionDestino(
     bolsinId: number,
     comisionMedicaDestinoId: number,
-  ): Promise<BolsinCompletoRegistro | null> {
-    return this.prisma.bolsin.findFirst({
+  ): Promise<Bolsin | null> {
+    const registro = await this.prisma.bolsin.findFirst({
       where: { id: bolsinId, comisionMedicaDestinoId },
       include: bolsinCompletoInclude,
     });
+    return registro ? this.mapper.mapearBolsin(registro) : null;
   }
 
-  async buscarCompletoPorIdEnTx(
-    tx: unknown,
-    bolsinId: number,
-  ): Promise<BolsinCompletoRegistro | null> {
-    const cliente = this.comoClienteTransaccional(tx);
-    return cliente.bolsin.findUnique({
+  async buscarPorId(bolsinId: number): Promise<Bolsin | null> {
+    const registro = await this.prisma.bolsin.findUnique({
       where: { id: bolsinId },
       include: bolsinCompletoInclude,
     });
+    return registro ? this.mapper.mapearBolsin(registro) : null;
   }
 
   async registrarCambioEstadoBolsin(
-    tx: unknown,
-    bolsinId: number,
-    estadoId: number,
-    empleadoId: number,
+    bolsin: Bolsin,
+    estado: Estado,
+    empleado: Empleado,
     fechaHora: Date,
   ): Promise<void> {
-    const cliente = this.comoClienteTransaccional(tx);
-    await cliente.cambioEstadoBolsin.updateMany({
-      where: { bolsinId, fechaHoraFin: null },
+    await this.prisma.cambioEstadoBolsin.updateMany({
+      where: { bolsinId: bolsin.id, fechaHoraFin: null },
       data: { fechaHoraFin: fechaHora },
     });
-    await cliente.cambioEstadoBolsin.create({
-      data: { bolsinId, estadoId, empleadoId, fechaHoraInicio: fechaHora },
+    await this.prisma.cambioEstadoBolsin.create({
+      data: {
+        bolsinId: bolsin.id,
+        estadoId: estado.id,
+        empleadoId: empleado.id,
+        fechaHoraInicio: fechaHora,
+      },
     });
   }
 
-  async actualizarEstadoRemitos(
-    tx: unknown,
-    bolsinId: number,
-    estadoId: number,
-  ): Promise<void> {
-    const cliente = this.comoClienteTransaccional(tx);
-    await cliente.remito.updateMany({
-      where: { bolsinId },
-      data: { estadoId },
+  async actualizarEstadoRemitos(bolsin: Bolsin, estado: Estado): Promise<void> {
+    await this.prisma.remito.updateMany({
+      where: { bolsinId: bolsin.id },
+      data: { estadoId: estado.id },
     });
   }
 
   async registrarCambioEstadoDocumentacion(
-    tx: unknown,
-    documentacionId: number,
-    estadoId: number,
-    empleadoId: number,
+    documentacion: Documentacion,
+    estado: Estado,
+    empleado: Empleado,
     fechaHora: Date,
   ): Promise<void> {
-    const cliente = this.comoClienteTransaccional(tx);
-    await cliente.cambioEstadoDocumentacion.updateMany({
-      where: { documentacionId, fechaHoraFin: null },
+    await this.prisma.cambioEstadoDocumentacion.updateMany({
+      where: { documentacionId: documentacion.id, fechaHoraFin: null },
       data: { fechaHoraFin: fechaHora },
     });
-    await cliente.cambioEstadoDocumentacion.create({
-      data: { documentacionId, estadoId, empleadoId, fechaHoraInicio: fechaHora },
+    await this.prisma.cambioEstadoDocumentacion.create({
+      data: {
+        documentacionId: documentacion.id,
+        estadoId: estado.id,
+        empleadoId: empleado.id,
+        fechaHoraInicio: fechaHora,
+      },
     });
-  }
-
-  async ejecutarEnTransaccion<T>(
-    fn: (tx: unknown) => Promise<T>,
-  ): Promise<T> {
-    return this.prisma.$transaction((tx) => fn(tx));
-  }
-
-  /**
-   * El tipo `Prisma.TransactionClient` solo existe dentro de esta
-   * implementación: la interfaz expone `unknown` para no filtrar detalles de
-   * Prisma hacia el gestor (DIP).
-   */
-  private comoClienteTransaccional(tx: unknown): Prisma.TransactionClient {
-    return tx as Prisma.TransactionClient;
   }
 }

@@ -1,6 +1,6 @@
 
-import { Estado } from './estado';
-import { Empleado } from './empleado';
+import { Estado } from '../../catalogo';
+import { Empleado } from '../../identidad';
 
 export class CambioEstadoBolsin {
   constructor(

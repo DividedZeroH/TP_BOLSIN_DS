@@ -2,8 +2,8 @@ import { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import request = require('supertest');
 import { AppModule } from '../src/app.module';
-import { PrismaService } from '../src/prisma/prisma.service';
-import { GestorRegistrarRecepcionBolsin } from '../src/recepcion-bolsin/gestor-registrar-recepcion-bolsin.service';
+import { PrismaService } from '../src/platform/persistence/prisma/prisma.service';
+import { GestorRegistrarRecepcionBolsin } from '../src/modules/recepcion-bolsin/application/services/gestor-registrar-recepcion-bolsin.service';
 
 describe('Registrar recepción de bolsín (e2e)', () => {
   let app: INestApplication;
@@ -33,10 +33,31 @@ describe('Registrar recepción de bolsín (e2e)', () => {
     const detalle = await request(app.getHttpServer())
       .get(`/api/recepciones-bolsines/${bolsinId}?sesionId=1`)
       .expect(200);
+    // El detalle publica las cuatro situaciones del análisis, marcando cuáles
+    // están implementadas, para que la pantalla no ofrezca como confirmable
+    // una opción que el gestor va a rechazar.
     expect(detalle.body.opciones).toEqual([
       {
         codigo: 'CONTENIDO_IGUAL',
         descripcion: 'El contenido del bolsín es igual al registrado.',
+        implementado: true,
+      },
+      {
+        codigo: 'FALTA_DOCUMENTACION',
+        descripcion:
+          'No se recibe toda la documentación asociada a los remitos que contiene el bolsín.',
+        implementado: false,
+      },
+      {
+        codigo: 'DOCUMENTACION_NO_CORRESPONDE',
+        descripcion:
+          'Existe documentación que no corresponde al destino (CM del usuario logueado).',
+        implementado: false,
+      },
+      {
+        codigo: 'REDIRIGIR_OTRA_AREA',
+        descripcion: 'La documentación se debe redirigir a otra área.',
+        implementado: false,
       },
     ]);
     expect(detalle.body.remitos).toHaveLength(2);
