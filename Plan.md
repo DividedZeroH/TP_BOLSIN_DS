@@ -32,6 +32,15 @@ Decisiones tomadas al retomar:
   en `Enviado`, no en `EnBolsinEnviado`.
 - `numeroPrecinto` es `integer` 1..5; la UI lo muestra como `BOL-2026-00N`.
 - Una fase = un commit en la rama `refactor/typeorm-postgres`.
+- **TypeORM 0.3 + `@nestjs/typeorm` 11**, no 1.x/12: `@nestjs/typeorm` 12 se
+  publica solo como ESM y ni Nest 11 (CommonJS) ni Jest lo cargan.
+- El gestor inyecta `Repository<BolsinOrmEntity>` y `DataSource`; sesión y
+  estados los pide a `SesionService` (identidad) y `EstadoService` (catálogo),
+  que son los dueños de esas tablas. Dentro de la transacción se les pasa el
+  `EntityManager`.
+- `buscarEstadosRecibidoYAceptado()` (plural, como en el diagrama de
+  secuencia) devuelve el estado del remito y el de la documentación. El
+  diagrama de clases del README lo escribe en singular.
 
 ---
 
@@ -262,7 +271,7 @@ implementada → `400`.
 | 0 | Andamiaje del monorepo, Docker/Postgres, ESLint, Prettier, CI | HECHA (healthcheck de Docker pendiente de verificar en una máquina con Docker) |
 | 1 | Dominio en TypeScript puro | HECHA |
 | 2 | TypeORM: entidades ORM, migraciones, seed | HECHA |
-| 3 | Gestor + store en memoria + mapper | PENDIENTE |
+| 3 | Gestor + store en memoria + mapper | HECHA |
 | 4 | HTTP: controllers, DTOs, validación de orden | PENDIENTE |
 | 5 | Frontend Angular | PENDIENTE |
 | 6 | E2E, CI verde, reescritura del README | PENDIENTE |

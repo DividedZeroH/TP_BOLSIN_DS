@@ -1,12 +1,9 @@
 import { Module } from '@nestjs/common';
-import { RecepcionBolsinModule } from './modules/recepcion-bolsin';
+import { DatabaseModule } from './database/database.module';
+import { IdentidadModule } from './modules/identidad/identidad.module';
+import { RecepcionBolsinModule } from './modules/recepcion-bolsin/recepcion-bolsin.module';
 
-/**
- * Monolito modular: la raíz solo compone subdominios de negocio. Los de
- * soporte (Catálogo, Identidad) los importa quien los necesita, a través de su
- * API pública.
- */
 @Module({
-  imports: [RecepcionBolsinModule],
+  imports: [DatabaseModule, IdentidadModule, RecepcionBolsinModule],
 })
 export class AppModule {}
