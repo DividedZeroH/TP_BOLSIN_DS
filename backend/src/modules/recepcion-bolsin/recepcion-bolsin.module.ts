@@ -11,6 +11,7 @@ import { DetalleRemitoOrmEntity } from './persistence/detalle-remito.orm-entity'
 import { DocumentacionOrmEntity } from './persistence/documentacion.orm-entity';
 import { RemitoOrmEntity } from './persistence/remito.orm-entity';
 import { TipoDocumentacionOrmEntity } from './persistence/tipo-documentacion.orm-entity';
+import { RecepcionBolsinController } from './recepcion-bolsin.controller';
 import { RecepcionEnCursoStore } from './recepcion-en-curso.store';
 
 /** CU28 — Registrar recepción de bolsín. */
@@ -28,6 +29,7 @@ import { RecepcionEnCursoStore } from './recepcion-en-curso.store';
     IdentidadModule,
     CatalogoModule,
   ],
+  controllers: [RecepcionBolsinController],
   providers: [GestorRegistrarRecepcionBolsin, RecepcionEnCursoStore, NotificadorCU29Service],
 })
 export class RecepcionBolsinModule {}

@@ -4,6 +4,7 @@ import { ComisionMedicaOrmEntity } from '../organizacion/persistence/comision-me
 import { EmpleadoOrmEntity } from './persistence/empleado.orm-entity';
 import { SesionOrmEntity } from './persistence/sesion.orm-entity';
 import { UsuarioOrmEntity } from './persistence/usuario.orm-entity';
+import { SesionController } from './sesion.controller';
 import { SesionService } from './sesion.service';
 
 /**
@@ -20,6 +21,7 @@ import { SesionService } from './sesion.service';
       ComisionMedicaOrmEntity,
     ]),
   ],
+  controllers: [SesionController],
   providers: [SesionService],
   exports: [SesionService],
 })

@@ -272,7 +272,7 @@ implementada → `400`.
 | 1 | Dominio en TypeScript puro | HECHA |
 | 2 | TypeORM: entidades ORM, migraciones, seed | HECHA |
 | 3 | Gestor + store en memoria + mapper | HECHA |
-| 4 | HTTP: controllers, DTOs, validación de orden | PENDIENTE |
+| 4 | HTTP: controllers, DTOs, validación de orden | HECHA |
 | 5 | Frontend Angular | PENDIENTE |
 | 6 | E2E, CI verde, reescritura del README | PENDIENTE |
 
