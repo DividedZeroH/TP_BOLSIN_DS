@@ -1,5 +1,5 @@
+import { ComisionMedica } from '../../organizacion/domain/comision-medica';
 
-import { ComisionMedica } from '../../organizacion';
 export class Empleado {
   constructor(
     public readonly id: number,

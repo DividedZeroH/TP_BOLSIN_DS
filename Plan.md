@@ -260,7 +260,7 @@ implementada → `400`.
 | Fase | Descripción | Estado |
 |---|---|---|
 | 0 | Andamiaje del monorepo, Docker/Postgres, ESLint, Prettier, CI | HECHA (healthcheck de Docker pendiente de verificar en una máquina con Docker) |
-| 1 | Dominio en TypeScript puro | PENDIENTE |
+| 1 | Dominio en TypeScript puro | HECHA |
 | 2 | TypeORM: entidades ORM, migraciones, seed | PENDIENTE |
 | 3 | Gestor + store en memoria + mapper | PENDIENTE |
 | 4 | HTTP: controllers, DTOs, validación de orden | PENDIENTE |

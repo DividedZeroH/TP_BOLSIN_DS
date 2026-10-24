@@ -1,9 +1,9 @@
-import { Estado } from '../../catalogo';
-import { Empleado } from '../../identidad';
-import { ComisionMedica } from '../../organizacion';
-import { Remito } from './remito';
-import { CambioEstadoBolsin} from './cambioEstadoBolsin';
+import { Estado } from '../../catalogo/domain/estado';
+import { Empleado } from '../../identidad/domain/empleado';
+import { ComisionMedica } from '../../organizacion/domain/comision-medica';
+import { CambioEstadoBolsin } from './cambio-estado-bolsin';
 import { Documentacion } from './documentacion';
+import { Remito } from './remito';
 
 /**
  * Raíz del agregado recibido. Sus métodos reproducen la delegación del
@@ -13,8 +13,8 @@ export class Bolsin {
   constructor(
     public readonly id: number,
     public readonly numeroPrecinto: number,
-    private readonly comisionMedicaOrigen: ComisionMedica,
-    private readonly comisionMedicaDestino: ComisionMedica,
+    private readonly cmOrigen: ComisionMedica,
+    private readonly cmDestino: ComisionMedica,
     private readonly remitos: Remito[],
     private readonly cambiosEstado: CambioEstadoBolsin[],
   ) {}
@@ -24,17 +24,20 @@ export class Bolsin {
   }
 
   obtenerTuCMDestino(): ComisionMedica {
-    return this.comisionMedicaDestino;
+    return this.cmDestino;
   }
 
   obtenerCMOrigen(): ComisionMedica {
-    return this.comisionMedicaOrigen;
+    return this.cmOrigen;
   }
 
   getNumeroPrecinto(): number {
     return this.numeroPrecinto;
   }
 
+  getCambiosEstado(): readonly CambioEstadoBolsin[] {
+    return this.cambiosEstado;
+  }
 
   buscarRemitoBolsin(): Remito[] {
     return this.remitos;

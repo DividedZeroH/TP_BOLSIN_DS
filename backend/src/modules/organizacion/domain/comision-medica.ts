@@ -1,5 +1,4 @@
 /** Entidad del modelo que identifica una comisión médica. */
-
 export class ComisionMedica {
   constructor(
     public readonly id: number,

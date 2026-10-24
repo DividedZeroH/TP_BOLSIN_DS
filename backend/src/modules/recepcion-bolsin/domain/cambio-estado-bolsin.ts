@@ -1,15 +1,14 @@
+import { Estado } from '../../catalogo/domain/estado';
+import { Empleado } from '../../identidad/domain/empleado';
 
-import { Empleado } from '../../identidad';
-import { Estado } from '../../catalogo';
-
-
-export class CambioEstadoDocumentacion {
+export class CambioEstadoBolsin {
   constructor(
+    /** `null` mientras el cambio no fue persistido. */
     public readonly id: number | null,
     public readonly fechaHoraInicio: Date,
     public fechaHoraFin: Date | null,
     public readonly estado: Estado,
-    public readonly empleado: Empleado,
+    public readonly responsable: Empleado,
   ) {}
 
   setFechaHoraFin(fechaHoraFin: Date): void {
@@ -18,5 +17,9 @@ export class CambioEstadoDocumentacion {
 
   sosActual(): boolean {
     return this.fechaHoraFin === null;
+  }
+
+  sosEnviado(): boolean {
+    return this.sosActual() && this.estado.sosEnviado();
   }
 }
