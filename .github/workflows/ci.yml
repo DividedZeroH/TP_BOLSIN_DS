@@ -5,15 +5,30 @@ on:
     branches: [main]
   pull_request:
 
-# Prisma necesita la variable aunque solo genere el cliente; los tests e2e
-# usan su propia base SQLite (file:./test.db).
-env:
-  DATABASE_URL: "file:./dev.db"
-
 jobs:
   verificacion:
     name: Lint, build y tests
     runs-on: ubuntu-latest
+
+    # Mismo Postgres 16 que en docker-compose.yml. En CI solo hace falta la
+    # base de tests.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: tpi
+          POSTGRES_PASSWORD: tpi
+          POSTGRES_DB: tpi_bolsin_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U tpi -d tpi_bolsin_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      TEST_DATABASE_URL: postgres://tpi:tpi@localhost:5432/tpi_bolsin_test
+
     steps:
       - uses: actions/checkout@v4
 
@@ -22,22 +37,19 @@ jobs:
           node-version: 20
           cache: npm
 
-      # `npm ci` dispara el postinstall del backend, que corre `prisma generate`.
       - name: Instalar dependencias
         run: npm ci
 
-      - name: Lint (reglas de capa hexagonal + calidad)
+      - name: Lint (domain/ sin TypeORM ni Nest + calidad)
         run: npm run lint
 
       - name: Build (backend + frontend)
         run: npm run build
 
-      # Incluye arquitectura.spec.ts: regla de dependencia, límites entre
-      # subdominios y API pública de cada módulo.
-      - name: Tests de arquitectura y unitarios (backend)
+      - name: Tests unitarios y de integración (backend, contra Postgres)
         run: npm test --workspace backend
 
-      - name: Tests e2e (backend)
+      - name: Tests e2e (backend, contra Postgres)
         run: npm run test:e2e --workspace backend
 
       - name: Tests (frontend)
