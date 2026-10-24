@@ -2,7 +2,9 @@
   <section class="panel-header" aria-labelledby="titulo-panel">
     <div>
       <h1 id="titulo-panel">Panel de control</h1>
-      <p>Usuario logueado: {{ usuario }}</p>
+      <p *ngIf="sesion">Usuario logueado: {{ sesion.usuarioLogueado.email }}</p>
+      <p *ngIf="sesion">Comision medica: {{ sesion.comisionMedica.nombre }}</p>
+      <p *ngIf="error">No se pudo consultar la sesion. Esta corriendo el backend?</p>
     </div>
   </section>
 

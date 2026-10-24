@@ -1,11 +1,11 @@
-import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { HttpErrorResponse } from '@angular/common/http';
 import { Router } from '@angular/router';
 import { of, throwError } from 'rxjs';
 import { RecepcionBolsinComponent } from './recepcion-bolsin.component';
 import {
+  BolsinSeleccionado,
   CodigoOpcionRecepcion,
-  DetalleBolsinVista,
   InicioRecepcion,
   OPCION_CONTENIDO_IGUAL,
   OPCION_FALTA_DOCUMENTACION,
@@ -19,8 +19,11 @@ describe('RecepcionBolsinComponent', () => {
   let service: jasmine.SpyObj<RecepcionBolsinService>;
   let router: jasmine.SpyObj<Router>;
 
+  const RECEPCION = '6f1c3f62-6a9b-4c4e-9f7e-1a2b3c4d5e6f';
+
   const inicio: InicioRecepcion = {
-    usuarioLogueado: { id: 1 },
+    recepcionId: RECEPCION,
+    usuarioLogueado: { id: 1, apellido: 'Perez', email: 'encargado.cordoba@demo.local' },
     comisionMedica: { id: 1, nombre: 'Comision Medica Cordoba' },
     bolsines: [
       {
@@ -31,7 +34,7 @@ describe('RecepcionBolsinComponent', () => {
     ],
   };
 
-  // Refleja el contrato real del backend: publica las cuatro situaciones del
+  // Refleja el contrato real del backend: publica las situaciones del
   // analisis y marca cuales estan implementadas.
   const opciones: OpcionRecepcionVista[] = [
     {
@@ -47,17 +50,12 @@ describe('RecepcionBolsinComponent', () => {
     },
   ];
 
-  const detalle: DetalleBolsinVista = {
-    id: 6,
-    numeroPrecinto: 2,
-    remitos: [
-      {
-        id: 16,
-        numero: 3,
-        documentaciones: [
-          { id: 7, tipo: 'Expediente medico', asunto: 'Solicitud de junta medica' },
-        ],
-      },
+  const seleccion: BolsinSeleccionado = {
+    bolsin: inicio.bolsines[0],
+    documentacion: [
+      { id: 7, numeroRemito: 3, tipo: 'Expediente medico', asunto: 'Solicitud de junta medica' },
+      { id: 8, numeroRemito: 3, tipo: 'Informe complementario', asunto: 'Resumen de historia' },
+      { id: 9, numeroRemito: 4, tipo: 'Expediente medico', asunto: 'Evaluacion de reingreso' },
     ],
     opciones,
   };
@@ -68,19 +66,35 @@ describe('RecepcionBolsinComponent', () => {
   const botones = (): HTMLButtonElement[] =>
     Array.from(fixture.nativeElement.querySelectorAll('button'));
 
+  const texto = (): string => fixture.nativeElement.textContent as string;
+
+  function tomarBolsinYOpcion(): void {
+    component.seleccionarBolsin(inicio.bolsines[0]);
+    component.seleccionarOpcion(opcionVista(OPCION_CONTENIDO_IGUAL));
+    fixture.detectChanges();
+  }
+
   beforeEach(async () => {
-    service = jasmine.createSpyObj<RecepcionBolsinService>(
-      'RecepcionBolsinService',
-      ['iniciar', 'tomarBolsin', 'confirmar'],
-    );
+    service = jasmine.createSpyObj<RecepcionBolsinService>('RecepcionBolsinService', [
+      'iniciar',
+      'tomarBolsin',
+      'tomarOpcion',
+      'confirmar',
+      'cancelar',
+    ]);
     service.iniciar.and.returnValue(of(inicio));
-    service.tomarBolsin.and.returnValue(of(detalle));
+    service.tomarBolsin.and.returnValue(of(seleccion));
+    service.tomarOpcion.and.returnValue(
+      of({ confirma: true, mensaje: 'Confirma la recepcion del bolsin con precinto 2?' }),
+    );
     service.confirmar.and.returnValue(
       of({
-        bolsinId: 6,
+        mensaje: 'Se registro la recepcion del bolsin con precinto 2.',
+        numeroPrecinto: 2,
         fechaHora: '2026-06-18T13:00:00.000Z',
       }),
     );
+    service.cancelar.and.returnValue(of(undefined));
     router = jasmine.createSpyObj<Router>('Router', ['navigate']);
     router.navigate.and.returnValue(Promise.resolve(true));
 
@@ -97,203 +111,118 @@ describe('RecepcionBolsinComponent', () => {
     fixture.detectChanges();
   });
 
-  it('muestra usuario logueado por mail, precinto numerico y sin columnas numero/peso', () => {
-    const texto = fixture.nativeElement.textContent as string;
-
-    expect(texto).toContain('Usuario logueado: encargado.cordoba@demo.local');
-    expect(texto).toContain('2');
-    expect(texto).not.toContain('Usuario 1');
-    expect(texto).not.toContain('Peso');
-    expect(texto).not.toContain('NUMERO');
+  it('muestra usuario, comision y el precinto con formato BOL-2026-NNN', () => {
+    expect(texto()).toContain('Usuario logueado: encargado.cordoba@demo.local');
+    expect(texto()).toContain('Comision Medica Cordoba');
+    expect(texto()).toContain('BOL-2026-002');
   });
 
   it('muestra mensaje cuando no hay bolsines disponibles', () => {
-    service.iniciar.and.returnValue(
-      of({ ...inicio, bolsines: [] }),
-    );
+    service.iniciar.and.returnValue(of({ ...inicio, bolsines: [] }));
     component.cargarInicio();
     fixture.detectChanges();
 
-    expect(fixture.nativeElement.textContent).toContain('No hay bolsines disponibles.');
+    expect(texto()).toContain('No hay bolsines disponibles.');
   });
 
-  it('muestra remito numerico y documentacion sin columna numero', fakeAsync(() => {
+  it('toma el bolsin por precinto en la recepcion en curso y agrupa la documentacion por remito', () => {
     component.seleccionarBolsin(inicio.bolsines[0]);
-    tick();
     fixture.detectChanges();
 
-    const texto = fixture.nativeElement.textContent as string;
-    expect(texto).toContain('Remito 3');
-    expect(texto).toContain('Expediente medico');
-    expect(texto).toContain('Seleccionado');
-    expect(texto).not.toContain('ID 16');
-    expect(texto).not.toContain('NUMERO');
-  }));
+    expect(service.tomarBolsin).toHaveBeenCalledWith(RECEPCION, 2);
+    expect(component.remitos.map((r) => r.numero)).toEqual([3, 4]);
+    expect(component.remitos[0].documentaciones).toHaveSize(2);
+    expect(texto()).toContain('Remito 3');
+    expect(texto()).toContain('Remito 4');
+    expect(texto()).toContain('Seleccionado');
+  });
 
-  it('toma las situaciones del backend y no de una lista propia', fakeAsync(() => {
+  it('toma las situaciones del backend y deshabilita las no implementadas', () => {
     component.seleccionarBolsin(inicio.bolsines[0]);
-    tick();
     fixture.detectChanges();
 
     expect(component.opcionesRecepcion).toEqual(opciones);
-    expect(fixture.nativeElement.textContent).toContain(
-      'El contenido del bolsin es igual al registrado.',
+    const noImplementada = botones().find((b) =>
+      b.textContent?.includes('No se recibe toda la documentacion'),
     );
-  }));
+    const implementada = botones().find((b) =>
+      b.textContent?.includes('El contenido del bolsin es igual al registrado.'),
+    );
+    expect(noImplementada?.disabled).toBeTrue();
+    expect(noImplementada?.textContent).toContain('No implementado');
+    expect(implementada?.disabled).toBeFalse();
+  });
 
-  it('deshabilita y marca las situaciones no implementadas', fakeAsync(() => {
+  it('no envia al backend una situacion no implementada', () => {
     component.seleccionarBolsin(inicio.bolsines[0]);
-    tick();
-    fixture.detectChanges();
-
-    const opcionNoImplementada = botones().find((boton) =>
-      boton.textContent?.includes('No se recibe toda la documentacion'),
-    );
-    const opcionImplementada = botones().find((boton) =>
-      boton.textContent?.includes('El contenido del bolsin es igual al registrado.'),
-    );
-
-    expect(opcionNoImplementada?.disabled).toBeTrue();
-    expect(opcionNoImplementada?.textContent).toContain('No implementado');
-    expect(opcionImplementada?.disabled).toBeFalse();
-  }));
-
-  it('permite cambiar entre situaciones implementadas e ignora las que no lo estan', () => {
-    component.seleccionarOpcion(opcionVista(OPCION_CONTENIDO_IGUAL));
-    expect(component.opcionSeleccionada).toBe(OPCION_CONTENIDO_IGUAL);
-
     component.seleccionarOpcion(opcionVista(OPCION_FALTA_DOCUMENTACION));
-    expect(component.opcionSeleccionada).toBe(OPCION_CONTENIDO_IGUAL);
+
+    expect(service.tomarOpcion).not.toHaveBeenCalled();
+    expect(component.opcionSeleccionada).toBeUndefined();
   });
 
-  it('mantiene cancelar visible desde el inicio y oculta la confirmacion', () => {
-    const botonesCancelar = botones().filter(
-      (boton) => boton.textContent?.trim() === 'Cancelar',
-    );
-    const botonConfirmar = botones().find(
-      (boton) => boton.textContent?.trim() === 'Confirmar',
-    );
-
-    expect(fixture.nativeElement.textContent).not.toContain('Confirmar recepcion');
-    expect(botonesCancelar).toHaveSize(1);
-    expect(botonConfirmar).toBeUndefined();
+  it('tomarOpcion muestra el pedido de confirmacion del backend', () => {
     expect(fixture.nativeElement.querySelector('.confirm-panel')).toBeNull();
-    expect(fixture.nativeElement.querySelector('.case-cancel-button')).not.toBeNull();
+
+    tomarBolsinYOpcion();
+
+    expect(service.tomarOpcion).toHaveBeenCalledWith(RECEPCION, OPCION_CONTENIDO_IGUAL);
+    expect(texto()).toContain('Confirma la recepcion del bolsin con precinto 2?');
+    const confirmar = botones().find((b) => b.textContent?.trim() === 'Confirmar');
+    expect(confirmar?.disabled).toBeFalse();
   });
 
-  it('muestra confirmar habilitado cuando se selecciona una situacion', fakeAsync(() => {
-    component.seleccionarBolsin(inicio.bolsines[0]);
-    tick();
-    fixture.detectChanges();
-
-    expect(
-      botones().find((boton) => boton.textContent?.trim() === 'Confirmar'),
-    ).toBeUndefined();
-
-    component.seleccionarOpcion(opcionVista(OPCION_CONTENIDO_IGUAL));
-    fixture.detectChanges();
-
-    const botonConfirmar = botones().find(
-      (boton) => boton.textContent?.trim() === 'Confirmar',
-    );
-
-    expect(fixture.nativeElement.textContent).toContain('Confirmar recepcion');
-    expect(botonConfirmar?.disabled).toBeFalse();
-    expect(fixture.nativeElement.querySelector('.confirm-panel')).not.toBeNull();
-    expect(fixture.nativeElement.querySelector('.confirm-panel')?.textContent).not.toContain(
-      'Cancelar',
-    );
-    expect(fixture.nativeElement.querySelector('.case-cancel-button')).not.toBeNull();
-  }));
-
-  it('pide confirmacion antes de cancelar el caso de uso', fakeAsync(() => {
-    component.seleccionarBolsin(inicio.bolsines[0]);
-    tick();
-    component.seleccionarOpcion(opcionVista(OPCION_CONTENIDO_IGUAL));
-    component.cancelarCasoUso();
-    fixture.detectChanges();
-
-    expect(fixture.nativeElement.textContent).toContain('Cancelar caso de uso');
-    expect(fixture.nativeElement.textContent).toContain(
-      'Desea confirmar la cancelacion del caso de uso?',
-    );
-    expect(router.navigate).not.toHaveBeenCalled();
-
-    component.rechazarCancelacion();
-    fixture.detectChanges();
-    expect(fixture.nativeElement.textContent).not.toContain('Cancelar caso de uso');
-    expect(router.navigate).not.toHaveBeenCalled();
-
-    component.cancelarCasoUso();
-    component.confirmarCancelacion();
-
-    expect(router.navigate).toHaveBeenCalledWith(['/panel']);
-  }));
-
-  it('confirma el flujo normal y muestra solo mensaje de exito', fakeAsync(() => {
-    component.seleccionarBolsin(inicio.bolsines[0]);
-    tick();
-    component.seleccionarOpcion(opcionVista(OPCION_CONTENIDO_IGUAL));
+  it('confirma y muestra el mensaje de exito; al aceptar arranca otra recepcion', () => {
+    tomarBolsinYOpcion();
     component.confirmarRecepcion();
-    tick();
     fixture.detectChanges();
 
-    const texto = fixture.nativeElement.textContent as string;
-    expect(service.confirmar).toHaveBeenCalledWith(1, 6, OPCION_CONTENIDO_IGUAL);
-    expect(texto).toContain('Recepcion registrada');
-    expect(texto).toContain('El registro de recepcion se confirmo correctamente.');
-    expect(texto).not.toContain('RecibidoYAceptado');
-    expect(texto).not.toContain('Aceptada');
-  }));
+    expect(service.confirmar).toHaveBeenCalledWith(RECEPCION);
+    expect(texto()).toContain('Recepcion registrada');
+    expect(texto()).toContain('Se registro la recepcion del bolsin con precinto 2.');
 
-  it('si el backend falla informa el error y no da la recepcion por registrada', fakeAsync(() => {
+    component.cerrarModal();
+    expect(service.iniciar).toHaveBeenCalledTimes(2);
+    expect(component.bolsinSeleccionado).toBeUndefined();
+  });
+
+  it('si el backend falla informa su mensaje y no da la recepcion por registrada', () => {
     service.confirmar.and.returnValue(
       throwError(
         () =>
           new HttpErrorResponse({
-            status: 500,
-            error: { message: 'No se encontro el bolsin seleccionado.' },
+            status: 400,
+            error: { message: 'El bolsín ya no está en estado Enviado.' },
           }),
       ),
     );
-    component.seleccionarBolsin(inicio.bolsines[0]);
-    tick();
-    component.seleccionarOpcion(opcionVista(OPCION_CONTENIDO_IGUAL));
-    component.confirmarRecepcion();
-    tick();
-    fixture.detectChanges();
-
-    const texto = fixture.nativeElement.textContent as string;
-    expect(texto).toContain('No se pudo confirmar');
-    expect(texto).toContain('No se encontro el bolsin seleccionado.');
-    expect(texto).not.toContain('Recepcion registrada');
-    // El bolsin sigue disponible: no se registro nada.
-    expect(component.bolsines).toHaveSize(1);
-  }));
-
-  it('no registra ni envia al backend una situacion no implementada', fakeAsync(() => {
-    component.seleccionarBolsin(inicio.bolsines[0]);
-    tick();
-    component.seleccionarOpcion(opcionVista(OPCION_FALTA_DOCUMENTACION));
+    tomarBolsinYOpcion();
     component.confirmarRecepcion();
     fixture.detectChanges();
 
-    let texto = fixture.nativeElement.textContent as string;
-    expect(component.opcionSeleccionada).toBeUndefined();
-    expect(service.confirmar).not.toHaveBeenCalled();
-    expect(texto).not.toContain('Recepcion registrada');
+    expect(texto()).toContain('No se pudo confirmar');
+    expect(texto()).toContain('El bolsín ya no está en estado Enviado.');
+    expect(texto()).not.toContain('Recepcion registrada');
+  });
 
-    // Guarda defensiva: aun forzando la seleccion, no se confirma ni se
-    // informa como registrada.
-    component.cerrarModal();
-    component.opcionSeleccionada = OPCION_FALTA_DOCUMENTACION;
-    component.confirmarRecepcion();
+  it('pide confirmacion antes de cancelar; al confirmar borra la recepcion y vuelve al panel', () => {
+    component.cancelarCasoUso();
     fixture.detectChanges();
+    expect(texto()).toContain('Desea confirmar la cancelacion del caso de uso?');
 
-    texto = fixture.nativeElement.textContent as string;
-    expect(service.confirmar).not.toHaveBeenCalled();
-    expect(texto).toContain('Situacion no implementada');
-    expect(texto).not.toContain('Recepcion registrada');
-    expect(component.bolsines).toHaveSize(1);
-  }));
+    component.rechazarCancelacion();
+    expect(service.cancelar).not.toHaveBeenCalled();
+    expect(router.navigate).not.toHaveBeenCalled();
+
+    component.cancelarCasoUso();
+    component.confirmarCancelacion();
+    expect(service.cancelar).toHaveBeenCalledWith(RECEPCION);
+    expect(router.navigate).toHaveBeenCalledWith(['/panel']);
+  });
+
+  it('vuelve al panel aunque la recepcion ya no exista en el backend', () => {
+    service.cancelar.and.returnValue(throwError(() => new HttpErrorResponse({ status: 404 })));
+    component.confirmarCancelacion();
+    expect(router.navigate).toHaveBeenCalledWith(['/panel']);
+  });
 });

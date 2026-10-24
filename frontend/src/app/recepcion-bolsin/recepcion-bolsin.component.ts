@@ -3,9 +3,10 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { Component, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
 import {
+  BolsinSeleccionado,
   BolsinVista,
-  CodigoOpcionRecepcion,
-  DetalleBolsinVista,
+  DocumentacionVista,
+  formatearPrecinto,
   InicioRecepcion,
   OpcionRecepcionVista,
 } from './recepcion-bolsin.modelos';
@@ -19,6 +20,16 @@ interface ModalRecepcion {
   mensaje: string;
 }
 
+interface RemitoVista {
+  numero: number;
+  documentaciones: DocumentacionVista[];
+}
+
+/**
+ * Pantalla del CU28. Cada acción es un mensaje al gestor del backend sobre la
+ * misma recepción en curso (`recepcionId`), en el orden del diagrama de
+ * secuencia.
+ */
 @Component({
   selector: 'app-recepcion-bolsin',
   imports: [CommonModule],
@@ -26,19 +37,19 @@ interface ModalRecepcion {
   styleUrl: './recepcion-bolsin.component.css',
 })
 export class RecepcionBolsinComponent implements OnInit {
-  readonly sesionId = 1;
+  readonly formatearPrecinto = formatearPrecinto;
 
   inicio?: InicioRecepcion;
   bolsines: BolsinVista[] = [];
   bolsinSeleccionado?: BolsinVista;
-  detalle?: DetalleBolsinVista;
-  opcionSeleccionada?: CodigoOpcionRecepcion;
+  detalle?: BolsinSeleccionado;
+  opcionSeleccionada?: OpcionRecepcionVista;
+  pedidoConfirmacion?: string;
   modal?: ModalRecepcion;
   cargando = true;
   cargandoDetalle = false;
   confirmando = false;
   mensajeCarga?: string;
-  private bolsinRegistradoId?: number;
 
   constructor(
     private readonly recepcionService: RecepcionBolsinService,
@@ -51,20 +62,11 @@ export class RecepcionBolsinComponent implements OnInit {
 
   get usuarioLogueadoTexto(): string {
     const usuario = this.inicio?.usuarioLogueado;
-    if (usuario?.email) {
-      return usuario.email;
-    }
-    if (usuario?.apellido) {
-      return usuario.apellido;
-    }
-    if (usuario?.id === 1 || !usuario) {
-      return 'encargado.cordoba@demo.local';
-    }
-    return 'Usuario logueado';
+    return usuario?.email ?? usuario?.apellido ?? '';
   }
 
   /**
-   * Las situaciones las publica el backend junto con el detalle del bolsin,
+   * Las situaciones las publica el backend junto con el bolsin tomado,
    * incluyendo cuales estan implementadas. La pantalla no mantiene su propia
    * lista para no poder ofrecer opciones que el gestor va a rechazar.
    */
@@ -72,23 +74,28 @@ export class RecepcionBolsinComponent implements OnInit {
     return this.detalle?.opciones ?? [];
   }
 
-  get opcionSeleccionadaVista(): OpcionRecepcionVista | undefined {
-    return this.opcionesRecepcion.find(
-      (opcion) => opcion.codigo === this.opcionSeleccionada,
-    );
-  }
-
-  get opcionSeleccionadaTexto(): string {
-    return this.opcionSeleccionadaVista?.descripcion ?? '';
+  /** La documentacion llega plana (buscarDocumentacionBolsin); se agrupa por remito. */
+  get remitos(): RemitoVista[] {
+    const remitos = new Map<number, RemitoVista>();
+    for (const documentacion of this.detalle?.documentacion ?? []) {
+      const remito = remitos.get(documentacion.numeroRemito) ?? {
+        numero: documentacion.numeroRemito,
+        documentaciones: [],
+      };
+      remito.documentaciones.push(documentacion);
+      remitos.set(remito.numero, remito);
+    }
+    return [...remitos.values()];
   }
 
   cargarInicio(): void {
     this.cargando = true;
     this.mensajeCarga = undefined;
-    this.recepcionService.iniciar(this.sesionId).subscribe({
+    this.limpiarSeleccion();
+    this.recepcionService.iniciar().subscribe({
       next: (inicio) => {
         this.inicio = inicio;
-        this.bolsines = inicio.bolsines ?? [];
+        this.bolsines = inicio.bolsines;
         this.cargando = false;
       },
       error: () => {
@@ -99,35 +106,38 @@ export class RecepcionBolsinComponent implements OnInit {
   }
 
   seleccionarBolsin(bolsin: BolsinVista): void {
+    if (!this.inicio) {
+      return;
+    }
     this.bolsinSeleccionado = bolsin;
     this.detalle = undefined;
     this.opcionSeleccionada = undefined;
+    this.pedidoConfirmacion = undefined;
     this.cargandoDetalle = true;
-    this.recepcionService.tomarBolsin(this.sesionId, bolsin.id).subscribe({
+    this.recepcionService.tomarBolsin(this.inicio.recepcionId, bolsin.numeroPrecinto).subscribe({
       next: (detalle) => {
         this.detalle = detalle;
         this.cargandoDetalle = false;
       },
-      error: () => {
+      error: (error: unknown) => {
         this.cargandoDetalle = false;
-        this.modal = {
-          tipo: 'error',
-          titulo: 'No se pudo cargar',
-          mensaje: 'No fue posible consultar el bolsin seleccionado.',
-        };
+        this.mostrarError('No se pudo cargar', error, 'No fue posible consultar el bolsin.');
       },
     });
   }
 
   seleccionarOpcion(opcion: OpcionRecepcionVista): void {
-    if (!opcion.implementado) {
+    if (!opcion.implementado || !this.inicio) {
       return;
     }
-    this.opcionSeleccionada = opcion.codigo;
-  }
-
-  cancelarConfirmacion(): void {
-    this.cancelarCasoUso();
+    this.recepcionService.tomarOpcion(this.inicio.recepcionId, opcion.codigo).subscribe({
+      next: (pedido) => {
+        this.opcionSeleccionada = opcion;
+        this.pedidoConfirmacion = pedido.mensaje;
+      },
+      error: (error: unknown) =>
+        this.mostrarError('Situacion no disponible', error, 'No se pudo tomar la situacion.'),
+    });
   }
 
   cancelarCasoUso(): void {
@@ -138,8 +148,17 @@ export class RecepcionBolsinComponent implements OnInit {
     };
   }
 
+  /** Descarta la recepcion en el backend y vuelve al panel aunque ya no exista. */
   confirmarCancelacion(): void {
-    void this.router.navigate(['/panel']);
+    const volver = () => void this.router.navigate(['/panel']);
+    if (!this.inicio) {
+      volver();
+      return;
+    }
+    this.recepcionService.cancelar(this.inicio.recepcionId).subscribe({
+      next: volver,
+      error: volver,
+    });
   }
 
   rechazarCancelacion(): void {
@@ -147,51 +166,32 @@ export class RecepcionBolsinComponent implements OnInit {
   }
 
   confirmarRecepcion(): void {
-    const opcion = this.opcionSeleccionadaVista;
-    if (!this.bolsinSeleccionado || !opcion) {
-      this.modal = {
-        tipo: 'error',
-        titulo: 'No se pudo confirmar',
-        mensaje: 'Selecciona un bolsin y una situacion para registrar.',
-      };
+    if (!this.inicio || !this.opcionSeleccionada?.implementado) {
       return;
     }
-
-    // Guarda defensiva: el boton ya viene deshabilitado, pero la recepcion no
-    // debe darse por registrada si la situacion no tiene flujo implementado.
-    if (!opcion.implementado) {
-      this.modal = {
-        tipo: 'error',
-        titulo: 'Situacion no implementada',
-        mensaje:
-          'Esta situacion corresponde a un flujo alternativo que todavia no esta implementado, por lo que no puede registrarse.',
-      };
-      return;
-    }
-
-    const bolsinId = this.bolsinSeleccionado.id;
     this.confirmando = true;
-    this.recepcionService.confirmar(this.sesionId, bolsinId, opcion.codigo).subscribe({
-      next: () => {
+    this.recepcionService.confirmar(this.inicio.recepcionId).subscribe({
+      next: (resultado) => {
         this.confirmando = false;
-        this.registrarExito(bolsinId);
+        this.modal = { tipo: 'exito', titulo: 'Recepcion registrada', mensaje: resultado.mensaje };
       },
       error: (error: unknown) => {
         this.confirmando = false;
-        this.modal = {
-          tipo: 'error',
-          titulo: 'No se pudo confirmar',
-          mensaje: this.mensajeDeError(error),
-        };
+        this.mostrarError(
+          'No se pudo confirmar',
+          error,
+          'No fue posible registrar la recepcion. Intenta nuevamente.',
+        );
       },
     });
   }
 
+  /** Tras el exito el backend ya cerro la recepcion: se arranca una nueva. */
   cerrarModal(): void {
     const tipoModal = this.modal?.tipo;
     this.modal = undefined;
     if (tipoModal === 'exito') {
-      this.limpiarSeleccionRegistrada();
+      this.cargarInicio();
     }
   }
 
@@ -199,43 +199,27 @@ export class RecepcionBolsinComponent implements OnInit {
     return bolsin.id;
   }
 
-  trackByRemito(_: number, remito: { id: number }): number {
-    return remito.id;
+  trackByRemito(_: number, remito: RemitoVista): number {
+    return remito.numero;
   }
 
-  trackByDocumentacion(_: number, documentacion: { id: number }): number {
+  trackByDocumentacion(_: number, documentacion: DocumentacionVista): number {
     return documentacion.id;
   }
 
-  /** Prioriza el mensaje que devuelve el backend (Nest) sobre uno generico. */
-  private mensajeDeError(error: unknown): string {
-    const cuerpo = (error as HttpErrorResponse | undefined)?.error as
-      | { message?: string | string[] }
-      | undefined;
-    const mensaje = Array.isArray(cuerpo?.message)
-      ? cuerpo?.message[0]
-      : cuerpo?.message;
-    return mensaje ?? 'No fue posible registrar la recepcion. Intenta nuevamente.';
-  }
-
-  private registrarExito(bolsinId?: number): void {
-    this.bolsinRegistradoId = bolsinId;
-    this.modal = {
-      tipo: 'exito',
-      titulo: 'Recepcion registrada',
-      mensaje: 'El registro de recepcion se confirmo correctamente.',
-    };
-  }
-
-  private limpiarSeleccionRegistrada(): void {
-    if (this.bolsinRegistradoId !== undefined) {
-      this.bolsines = this.bolsines.filter(
-        (bolsin) => bolsin.id !== this.bolsinRegistradoId,
-      );
-    }
-    this.bolsinRegistradoId = undefined;
+  private limpiarSeleccion(): void {
     this.bolsinSeleccionado = undefined;
     this.detalle = undefined;
     this.opcionSeleccionada = undefined;
+    this.pedidoConfirmacion = undefined;
+  }
+
+  /** Prioriza el mensaje que devuelve el backend (Nest) sobre uno generico. */
+  private mostrarError(titulo: string, error: unknown, generico: string): void {
+    const cuerpo = (error as HttpErrorResponse | undefined)?.error as
+      | { message?: string | string[] }
+      | undefined;
+    const mensaje = Array.isArray(cuerpo?.message) ? cuerpo?.message[0] : cuerpo?.message;
+    this.modal = { tipo: 'error', titulo, mensaje: mensaje ?? generico };
   }
 }

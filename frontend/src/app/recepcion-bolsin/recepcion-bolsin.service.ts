@@ -2,38 +2,52 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import {
+  BolsinSeleccionado,
   CodigoOpcionRecepcion,
-  DetalleBolsinVista,
   InicioRecepcion,
+  PedidoConfirmacion,
   ResultadoRecepcionBolsin,
+  SesionVista,
 } from './recepcion-bolsin.modelos';
+
+/** No hay autenticación: la pantalla trabaja siempre con la sesión del seed. */
+export const SESION_ID = 1;
 
 @Injectable({ providedIn: 'root' })
 export class RecepcionBolsinService {
-  private readonly baseUrl = 'http://localhost:3000/api/recepciones-bolsines';
+  private readonly api = 'http://localhost:3000/api';
+  private readonly recepciones = `${this.api}/recepciones-bolsines`;
 
   constructor(private readonly http: HttpClient) {}
 
-  iniciar(sesionId: number): Observable<InicioRecepcion> {
-    return this.http.get<InicioRecepcion>(`${this.baseUrl}/iniciar`, {
-      params: { sesionId },
+  comisionDeSesion(sesionId = SESION_ID): Observable<SesionVista> {
+    return this.http.get<SesionVista>(`${this.api}/sesiones/${sesionId}/comision-medica`);
+  }
+
+  iniciar(sesionId = SESION_ID): Observable<InicioRecepcion> {
+    return this.http.post<InicioRecepcion>(this.recepciones, { sesionId });
+  }
+
+  tomarBolsin(recepcionId: string, numeroPrecinto: number): Observable<BolsinSeleccionado> {
+    return this.http.post<BolsinSeleccionado>(`${this.recepciones}/${recepcionId}/bolsin`, {
+      numeroPrecinto,
     });
   }
 
-  tomarBolsin(sesionId: number, bolsinId: number): Observable<DetalleBolsinVista> {
-    return this.http.get<DetalleBolsinVista>(`${this.baseUrl}/${bolsinId}`, {
-      params: { sesionId },
+  tomarOpcion(recepcionId: string, codigo: CodigoOpcionRecepcion): Observable<PedidoConfirmacion> {
+    return this.http.post<PedidoConfirmacion>(`${this.recepciones}/${recepcionId}/opcion`, {
+      codigo,
     });
   }
 
-  confirmar(
-    sesionId: number,
-    bolsinId: number,
-    opcion: CodigoOpcionRecepcion,
-  ): Observable<ResultadoRecepcionBolsin> {
+  confirmar(recepcionId: string): Observable<ResultadoRecepcionBolsin> {
     return this.http.post<ResultadoRecepcionBolsin>(
-      `${this.baseUrl}/${bolsinId}/confirmar`,
-      { sesionId, opcion, confirmacion: true },
+      `${this.recepciones}/${recepcionId}/confirmacion`,
+      {},
     );
+  }
+
+  cancelar(recepcionId: string): Observable<void> {
+    return this.http.delete<void>(`${this.recepciones}/${recepcionId}`);
   }
 }
