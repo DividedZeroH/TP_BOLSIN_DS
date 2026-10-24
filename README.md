@@ -602,3 +602,52 @@ Es exactamente lo que corre el CI (`.github/workflows/ci.yml`), que usa un
 service container `postgres:16`. Los tests usan siempre `TEST_DATABASE_URL`,
 aplican las migraciones solos y vacían y vuelven a sembrar las tablas antes
 de cada caso.
+
+## Flujo de colaboración y gestión de ramas
+
+Para mantener la coherencia del diseño, la estabilidad del código y el paso exitoso del CI, todos los colaboradores del equipo siguen estas pautas al trabajar con ramas:
+
+### 1. Convención de ramas
+
+| Prefijo | Propósito | Ejemplo |
+|---|---|---|
+| `feature/` | Nuevas funcionalidades o pantallas | `feature/filtro-bolsines`, `feature/opcion-rechazo` |
+| `refactor/` | Reestructuraciones de código, arquitectura o persistencia | `refactor/typeorm-postgres`, `refactor/capas` |
+| `fix/` o `bugfix/` | Corrección de fallos o discrepancias con el modelo | `fix/validacion-precinto`, `bugfix/fechafin-null` |
+| `docs/` | Actualizaciones de documentación, README o diagramas | `docs/guia-estudio`, `docs/readme-fase6` |
+| `chore/` | Tareas de tooling, dependencias, Docker o CI | `chore/update-eslint`, `chore/docker-compose-tuning` |
+
+> La rama **`main`** contiene siempre la versión estable y funcional integrada. Se recomienda no hacer push directo a `main` y canalizar los cambios a través de Pull Requests.
+
+### 2. Flujo de trabajo para colaboradores
+
+1. **Sincronizar `main` local:**
+   ```bash
+   git checkout main
+   git pull origin main
+   ```
+2. **Crear la rama de trabajo:**
+   ```bash
+   git checkout -b feature/nombre-descriptivo
+   ```
+3. **Commits atómicos y descriptivos:**
+   - Usar el estándar de Conventional Commits (`feat:`, `refactor:`, `docs:`, `test:`, `chore:`).
+   - Mantener commits pequeños y autocontenidos.
+4. **Verificación previa al push:**
+   Antes de subir cambios al remoto, verificar que toda la suite pase localmente:
+   ```bash
+   npm run lint        # Valida que domain/ no importe TypeORM ni NestJS
+   npm run build       # Compila backend y frontend
+   npm test            # Tests unitarios y de integración contra Postgres
+   npm run test:e2e    # Flujo end-to-end de endpoints HTTP
+   ```
+5. **Crear Pull Request (PR):**
+   - Abrir el PR hacia `main`.
+   - Incluir una descripción con la motivación del cambio y la relación con el caso de uso / diagramas.
+   - Esperar la ejecución en verde del pipeline de CI (`.github/workflows/ci.yml`).
+   - Solicitar revisión y aprobación de al menos un colaborador antes del merge.
+6. **Integridad arquitectónica (Reglas no negociables):**
+   - **`domain/` en TypeScript puro:** No agregar decoradores ni librerías externas en entidades de dominio.
+   - **Nombres del modelo:** Respetar estrictamente los nombres de clases y métodos del diagrama de clases y de secuencia suministrados.
+   - **Esquema de base de datos:** Cualquier cambio en tablas o columnas debe realizarse exclusivamente a través de migraciones de TypeORM (`npm run db:migrate`), nunca mediante `synchronize: true`.
+
