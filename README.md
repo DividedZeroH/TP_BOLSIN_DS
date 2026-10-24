@@ -5,7 +5,7 @@ tags:
   - diseño-sistemas/tp-integrador
   - proyecto/ppai-bolsin
   - arquitectura/nest-angular
-  - patrones/repositorio
+  - persistencia/typeorm-postgres
   - grasp
 aliases:
   - TP Bolsín DS
@@ -23,7 +23,7 @@ funcional suministrados (Entrega 1, PPAI 2026, Grupo 6).
 
 - Lenguaje: TypeScript.
 - Backend: NestJS.
-- Persistencia: Prisma ORM con SQLite.
+- Persistencia: TypeORM + PostgreSQL 16 (Docker Compose).
 - Frontend: Angular standalone.
 - Tecnología: Web.
 
@@ -49,7 +49,7 @@ literalmente.
 
 `Empleado`, `ComisionMedica`, `Sesion` y `Usuario` son transversales: cualquier
 caso de uso futuro los necesita para saber quién está logueado y a qué comisión
-pertenece, por eso viven en el kernel compartido (`shared/`, ver more abajo) y
+pertenece, por eso viven en sus propios módulos (`identidad`, `organizacion`) y
 no dentro del módulo de un único CU.
 
 ```mermaid
@@ -400,288 +400,196 @@ sequenceDiagram
 
 ## Arquitectura del backend
 
-El backend está organizado como **monolito modular** con **arquitectura hexagonal**
-(puertos y adaptadores) por módulo:
+NestJS clásico, organizado por **módulos de dominio**. Cada request recorre
+siempre el mismo camino:
 
-La división de primer nivel es por **subdominio del negocio**, no por tipo de
-archivo: lo primero que se lee son los nombres del dominio, no los del
-framework. Lo puramente técnico vive aparte, en `platform/`, y no finge ser un
-subdominio.
+```
+controller  →  service (gestor)  →  repositorio TypeORM  →  PostgreSQL
+                    │
+                    └── entidades de dominio (TypeScript puro)
+```
 
 ```
 backend/src/
-├── arquitectura.spec.ts        # test que hace fallar el build si se viola la regla
-├── platform/                   # base técnica, NO es un subdominio
-│   └── persistence/prisma/     # PrismaModule y PrismaService
+├── main.ts / configurar-app.ts   # prefijo /api, ValidationPipe global, CORS
+├── app.module.ts
+├── database/
+│   ├── configuracion.ts          # lee .env (DATABASE_URL / TEST_DATABASE_URL)
+│   ├── database.module.ts        # @Global(), TypeOrmModule.forRootAsync, synchronize: false
+│   ├── data-source.ts            # DataSource de la CLI (migraciones) y del seed
+│   ├── migrations/               # única forma de cambiar el esquema
+│   └── seeds/seed.ts             # escenario de demo, idempotente
 └── modules/
-    ├── recepcion-bolsin/       # subdominio principal (CU28)
-    │   ├── index.ts            # API pública: solo expone el módulo Nest
-    │   ├── domain/             # Bolsin, Remito, DetalleRemito, Documentacion, ...
-    │   ├── application/
-    │   │   ├── ports/
-    │   │   │   ├── in/         # puerto de entrada: IRegistrarRecepcionBolsin
-    │   │   │   └── out/        # IBolsinRepository, IUnidadDeTrabajo, INotificadorRecepcion
-    │   │   ├── dto/            # contratos de entrada/salida del caso de uso
-    │   │   ├── errors/         # errores propios, sin semántica HTTP
-    │   │   └── services/       # Gestor (implementa el puerto de entrada) y manejadores
-    │   ├── infrastructure/
-    │   │   ├── http/           # controlador REST y filtro de errores
-    │   │   ├── notificaciones/ # adaptador del <<include>> al CU29
-    │   │   └── persistence/    # adaptadores de salida, mapper y registros
-    │   └── recepcion-bolsin.module.ts
-    ├── identidad/              # subdominio de soporte: quién está logueado
-    │   ├── index.ts            # API pública: Sesion, Usuario, Empleado, puerto y módulo
-    │   ├── domain/ application/ infrastructure/
-    │   └── identidad.module.ts
-    ├── catalogo/               # subdominio de soporte: catálogo de Estado
-    │   ├── index.ts
-    │   ├── domain/ application/ infrastructure/
-    │   └── catalogo.module.ts
-    └── organizacion/           # kernel compartido: ComisionMedica
-        ├── index.ts
-        └── domain/
+    ├── recepcion-bolsin/         # CU28
+    │   ├── recepcion-bolsin.controller.ts
+    │   ├── gestor-registrar-recepcion-bolsin.service.ts
+    │   ├── recepcion-en-curso.store.ts   # pasos con estado, en memoria
+    │   ├── notificador-cu29.service.ts   # <<include>> CU29 (solo log)
+    │   ├── opciones-recepcion.ts         # catálogo de las 4 situaciones
+    │   ├── bolsin.mapper.ts              # ORM -> dominio
+    │   ├── dto/                          # solicitudes (class-validator) y respuestas
+    │   ├── persistence/                  # *.orm-entity.ts (decoradores de TypeORM)
+    │   └── domain/                       # Bolsin, Remito, DetalleRemito, Documentacion, ...
+    ├── identidad/                # Sesion -> Usuario -> Empleado; SesionService y SesionController
+    ├── catalogo/                 # Estado y EstadoService
+    └── organizacion/             # ComisionMedica (solo dominio, entidad ORM y mapper)
 ```
 
-Cada subdominio expone una **API pública** (`index.ts`) y los demás solo pueden
-importar desde ahí: alcanzar un archivo interno de otro módulo está prohibido y
-verificado. Eso es lo que separa un monolito modular de una bola de barro con
-carpetas.
+- **`domain/` es TypeScript puro.** Las clases del diagrama no tienen
+  decoradores, ni de Nest ni de TypeORM. Las tablas se describen aparte, en
+  `persistence/*.orm-entity.ts`, y los mappers (`bolsin.mapper.ts`,
+  `sesion.mapper.ts`, `estado.mapper.ts`) reconstruyen el agregado de dominio
+  a partir de las entidades ORM cargadas con `relations` explícitas.
+- **El gestor es un `@Injectable()` común.** Inyecta
+  `Repository<BolsinOrmEntity>`, `DataSource`, `SesionService` y
+  `EstadoService`, y lanza `NotFoundException` / `BadRequestException`. Tiene
+  un método por mensaje del diagrama de secuencia, en el mismo orden.
+- **Confirmación atómica.** `tomarConfirmacion()` corre dentro de
+  `dataSource.transaction(...)`. Primero bloquea el bolsín
+  (`SELECT … FOR UPDATE`) y lo relee. Después el dominio aplica las reglas
+  (`registrarCambioEstadoBolsin`, `actualizarEstadoRemito`,
+  `actualizarDocumentacion`) y recién ahí se persisten los cambios: se cierra
+  el cambio actual (`fecha_hora_fin`) y se inserta el nuevo con su
+  responsable. El CU29 se notifica después del commit.
+- **Recepción en curso.** La secuencia exige cuatro mensajes con estado
+  (`nuevaRecepcionBolsin` → `tomarBolsin` → `tomarOpcion` →
+  `tomarConfirmacion`). Lo tomado entre uno y otro vive en
+  `RecepcionEnCursoStore`, un `Map` en memoria keyed por `recepcionId` (UUID)
+  con TTL de 30 minutos. No va en campos del gestor porque el gestor es
+  singleton y mezclaría usuarios. Los pasos fuera de orden responden 400.
 
-`organizacion` es un kernel compartido a propósito: `ComisionMedica` es el mismo
-concepto para identidad (a qué comisión pertenece un empleado) y para recepción
-de bolsín (origen y destino). Lo que **no** se comparte es la representación
-persistente: cada módulo define su propio `ComisionMedicaRegistro`, porque las
-filas son un detalle de cada contexto.
+### API
 
-Las tres propiedades que hacen que esto sea hexagonal y no solo carpetas con
-nombres lindos:
-
-1. **La regla de dependencia se cumple y es ejecutable.** `domain/` no importa
-   nada de `application/` ni de `infrastructure/`, y `application/` no importa
-   nada de `infrastructure/`. No es una promesa del README: lo verifica
-   `src/arquitectura.spec.ts` en cada `npm test`, y falla nombrando el import
-   culpable.
-2. **Los puertos hablan en lenguaje de dominio.** `IBolsinRepository` recibe y
-   devuelve `Bolsin`, `Estado`, `Empleado` — nunca filas ni tipos de Prisma.
-   Reconstruir el agregado es tarea del adaptador (`BolsinMapper`, que por eso
-   vive en `infrastructure/persistence/`). Los `*Registro` existen, pero solo
-   los ve infraestructura.
-3. **Hay puerto de entrada, no solo de salida.** El controlador HTTP depende de
-   `IRegistrarRecepcionBolsin`, no de `GestorRegistrarRecepcionBolsin`. Exponer
-   el CU por otro transporte (CLI, cola) no toca la capa de aplicación.
-4. **El núcleo no depende de ningún framework.** Ni `domain/` ni `application/`
-   importan NestJS o Prisma — también lo verifica el test. El gestor no tiene
-   decoradores (se construye por fábrica en el módulo, que es el composition
-   root) y lanza errores propios (`EntidadNoEncontradaError`,
-   `OperacionInvalidaError`) en vez de `NotFoundException`/`BadRequestException`:
-   traducirlos a 404 o 400 es tarea de `ErroresRecepcionBolsinFilter`, en el
-   adaptador HTTP. Antes había 15 excepciones HTTP dentro del caso de uso, o
-   sea semántica de transporte incrustada en el núcleo.
-
-La atomicidad se resuelve con el puerto `IUnidadDeTrabajo`: el gestor pide
-"ejecutá esto de forma atómica" y recibe repositorios ya ligados a la
-transacción, con las mismas interfaces de siempre. Antes un `tx: unknown`
-atravesaba 22 firmas —el tipo estaba escondido, pero el concepto de transacción
-igual filtraba a la aplicación—; hoy no queda ninguno.
-
-Tokens de inyección (DIP) y quién los provee:
-
-| Token | Interfaz | Implementación | Declarado en |
-|---|---|---|---|
-| `REGISTRAR_RECEPCION_BOLSIN` | `IRegistrarRecepcionBolsin` (puerto de entrada) | `GestorRegistrarRecepcionBolsin` | `modules/recepcion-bolsin/recepcion-bolsin.module.ts` |
-| `BOLSIN_REPOSITORY` | `IBolsinRepository` | `PrismaBolsinRepository` | `modules/recepcion-bolsin/recepcion-bolsin.module.ts` |
-| `UNIDAD_DE_TRABAJO` | `IUnidadDeTrabajo` | `PrismaUnidadDeTrabajo` | `modules/recepcion-bolsin/recepcion-bolsin.module.ts` |
-| `NOTIFICADOR_RECEPCION` | `INotificadorRecepcion` | `NotificadorCU29Log` | `modules/recepcion-bolsin/recepcion-bolsin.module.ts` |
-| `ESTADO_REPOSITORY` | `IEstadoRepository` | `PrismaEstadoRepository` | `modules/catalogo/catalogo.module.ts` |
-| `SESION_REPOSITORY` | `ISesionRepository` | `PrismaSesionRepository` | `modules/identidad/identidad.module.ts` |
-
-Los adaptadores de persistencia reciben el cliente Prisma por constructor (no
-por inyección de campo) y por eso se registran con `useFactory`: es lo que
-permite que la unidad de trabajo cree instancias equivalentes ligadas a una
-transacción abierta.
-
-`PrismaModule` **no** es `@Global()`, a propósito: en un monolito modular los
-límites entre módulos se declaran, no se perforan. Quien necesite
-`PrismaService` importa `PrismaModule` desde `platform/`.
-
-`backend/prisma/` (`schema.prisma`, `migrations/`, `seed.ts`) es la carpeta que
-exige la CLI de Prisma en la raíz del proyecto backend y no se movió — no debe
-confundirse con `backend/src/platform/persistence/prisma/`, que es el módulo de
-NestJS que envuelve al cliente generado.
+| Mensaje de la secuencia | Endpoint | Body |
+|---|---|---|
+| `nuevaRecepcionBolsin()` | `POST /api/recepciones-bolsines` | `{ sesionId }` |
+| (rehidratar pantalla) | `GET /api/recepciones-bolsines/:recepcionId` | — |
+| `tomarBolsin()` | `POST /api/recepciones-bolsines/:recepcionId/bolsin` | `{ numeroPrecinto }` |
+| `tomarOpcion()` → `pedirConfirmacion()` | `POST /api/recepciones-bolsines/:recepcionId/opcion` | `{ codigo }` |
+| `tomarConfirmacion()` → `finDelCU()` | `POST /api/recepciones-bolsines/:recepcionId/confirmacion` | `{}` |
+| cancelar | `DELETE /api/recepciones-bolsines/:recepcionId` | — (204) |
+| panel | `GET /api/sesiones/:id/comision-medica` | — |
 
 ## Cómo se hace cumplir la arquitectura
 
-Las reglas no viven en la buena voluntad de quien programa: fallan solas, y en
-dos lugares complementarios.
-
-**ESLint** (`eslint.config.mjs`, en la raíz del monorepo) tiene las reglas de
-**capa**, que son las que conviene ver subrayadas en el editor mientras
-escribís:
-
-- `**/domain/**` no puede importar `application/`, `infrastructure/`, NestJS ni
-  Prisma.
-- `**/application/**` no puede importar `infrastructure/`, NestJS ni Prisma.
-
-Cada una falla con un mensaje que explica qué hacer en su lugar (por ejemplo,
-"definí un puerto" o "usá errores propios en vez de excepciones HTTP").
-
-**El test de arquitectura** (`backend/src/arquitectura.spec.ts`) tiene las
-reglas de **módulo**, que necesitan resolver rutas relativas y escalan solas
-cuando se agrega un subdominio:
-
-- ningún módulo alcanza el interior de otro (solo se puede importar su
-  `index.ts`);
-- cada módulo expone su API pública;
-- más las reglas de capa, por si alguien desactiva ESLint.
-
-```bash
-npm run lint       # reglas de capa + calidad, en todo el monorepo
-npm test           # incluye el test de arquitectura
-```
-
-Ambas corren en CI (`.github/workflows/ci.yml`) en cada push a `main` y en cada
-pull request, junto con el build y los tests e2e.
+- **Una sola regla de ESLint** (`eslint.config.mjs`): nada dentro de
+  `backend/src/**/domain/**` puede importar `typeorm` ni `@nestjs/*`. El
+  mensaje del error explica dónde va cada cosa.
+- **Tests de integración y e2e contra Postgres real.** Recorren el flujo
+  completo y los casos de error, y verifican en la base que el bolsín quedó
+  `Recibido`, los remitos `RecibidoYAceptado` y la documentación `Aceptada`,
+  con los cambios anteriores cerrados.
 
 ## Trazabilidad: hallazgos de coherencia entre diagramas y código
 
-Comparar los tres diagramas de análisis contra la implementación (más allá de
-que los nombres de clases/métodos coincidan) sacó a la luz varios puntos donde
-el código se apartaba de lo modelado. La mayoría ya están corregidos.
-
-**Vigente:**
-
 1. **La máquina de estados explica el alcance real de las "opciones" de
-   recepción.** Ver la sección anterior: solo la rama que termina en
-   `Aceptada` tiene representación en el backend (`seed.ts` solo crea los
-   estados `EnBolsinEnviado` y `Aceptada` para `DOCUMENTACION`); `Redirigida`,
-   `Rechazada` y `NoRecibida` no existen en ningún lado del código.
-
-2. **La escritura se hace en dos pasos.** El gestor aplica la regla en el
-   agregado (`bolsin.registrarCambioEstadoBolsin(...)`) y después le pide al
-   puerto que lo persista. Lo más puro sería un `guardar(bolsin)` que derive
-   los cambios del propio agregado, pero eso exige getters (`getCambiosEstado()`,
-   `getEstado()`) que **no están en el diagrama de clases**. Se priorizó la
-   fidelidad al modelo de análisis, que es lo que evalúa la cátedra: los
-   comandos del puerto reciben entidades de dominio, no ids sueltos, así que
-   el acoplamiento a persistencia sigue siendo nulo.
-
-**Corregidos:**
-
-- `nuevaRecepcionBolsin()` antes esquivaba el dominio: filtraba por SQL y
-  devolvía campos crudos del registro Prisma, dejando `buscarPrecintoBolsin()`
-  y `buscarComisionMedicaBolsin()` como código muerto. Hoy el puerto devuelve
-  `Bolsin[]` y el gestor usa los tres métodos —`sosEnviado()`,
-  `getNumeroPrecinto()`, `obtenerCMOrigen()`— igual que los loops
-  `LoopBolsin` / `LoopBolsinPrecinto` / `LoopBolsinCM` de la secuencia.
-- `buscarUsuarioLogueado()` navega `Sesion -> Usuario -> Empleado` con los
-  mensajes del diagrama, porque el puerto devuelve el agregado `Sesion`. Antes
-  recibía una fila ya aplanada y las clases `Sesion` y `Usuario` estaban
-  muertas.
-- `buscarEstadoAceptadaDocumentacion()` no validaba el estado traído con
-  predicados de dominio, a diferencia de sus métodos hermanos. Hoy valida con
-  `sosAmbitoDocumentacion()` y `sosAceptada()` (predicado agregado a `Estado`
-  para cerrar esa asimetría).
+   recepción.** Solo la rama que termina en `Aceptada` existe en el backend:
+   el seed crea únicamente `EnBolsinEnviado` y `Aceptada` para
+   `DOCUMENTACION`. `Redirigida`, `Rechazada` y `NoRecibida` no aparecen en
+   ningún lado del código.
+2. **Getters fuera del diagrama.** Para persistir el agregado después de que
+   el dominio aplica la regla, `Bolsin` y `Documentacion` exponen
+   `getCambiosEstado()` y `Remito` expone `getEstado()`. No figuran en el
+   diagrama de clases. Son de solo lectura y no cambian ningún comportamiento
+   modelado.
+3. **`buscarEstadosRecibidoYAceptado()`** se nombra como en el diagrama de
+   secuencia (en plural) y devuelve el estado del remito y el de la
+   documentación. El diagrama de clases lo escribe en singular.
+4. `nuevaRecepcionBolsin()` usa los métodos del dominio igual que los loops
+   `LoopBolsin` / `LoopBolsinPrecinto` / `LoopBolsinCM` de la secuencia:
+   `sosEnviado()`, `obtenerTuCMDestino()`, `getNumeroPrecinto()` y
+   `obtenerCMOrigen()`.
 
 ## Limitaciones conocidas / fuera de alcance
 
 - Solo se implementó la opción **"El contenido del bolsín es igual al
-  registrado"** (`CONTENIDO_IGUAL`). Las otras 3 opciones
-  (`FALTA_DOCUMENTACION`, `DOCUMENTACION_NO_CORRESPONDE`,
-  `REDIRIGIR_OTRA_AREA`) están declaradas en `MANEJADORES_OPCION_RECEPCION`
-  con `implementado: false`, y el gestor las rechaza con 400.
-  La pantalla **muestra las cuatro situaciones del análisis** (para no perder
-  trazabilidad con la plantilla funcional) pero las no implementadas se
-  renderizan deshabilitadas y con la etiqueta "No implementado": no se pueden
-  seleccionar ni confirmar. El catálogo lo publica el backend en
-  `GET /recepciones-bolsines/:id` (campo `opciones`, con `codigo`,
-  `descripcion` e `implementado`), de modo que `MANEJADORES_OPCION_RECEPCION`
-  es la única fuente de verdad y la UI no puede desincronizarse: implementar
-  una opción nueva es cambiar `implementado: true` en esa tabla.
-- **CU29** ("Notificar Recepción de Bolsín") no está modelado en esta entrega.
-  El `<<include>>` del diagrama de secuencia sí está materializado como puerto
-  de salida (`INotificadorRecepcion`): hoy lo implementa `NotificadorCU29Log`,
-  que solo deja constancia en el log. Cuando el CU29 exista se reemplaza ese
-  adaptador sin tocar el gestor.
-- **Las opciones de recepción todavía no son un Strategy.**
-  `MANEJADORES_OPCION_RECEPCION` describe las situaciones y marca cuáles están
-  implementadas, pero `ManejadorOpcionRecepcion` no tiene comportamiento y
-  `tomarConfirmacion()` tiene un único flujo fijo. Al implementar los flujos
-  alternativos A1–A6, cada entrada debería ganar su propio `ejecutar(...)` y el
-  gestor delegar en él; si no, va a aparecer el `if/else` que esa tabla
-  pretende evitar.
-- Los flujos alternativos A1–A6 de la plantilla funcional (asociados a las 3
-  opciones no implementadas y a sus transiciones de estado) quedan fuera de
-  alcance.
-- No hay autenticación: `sesionId` viaja como parámetro y el frontend lo fija
-  en `1`. La URL del backend también está fija en el service de Angular.
+  registrado"** (`CONTENIDO_IGUAL`). Las otras 3 (`FALTA_DOCUMENTACION`,
+  `DOCUMENTACION_NO_CORRESPONDE`, `REDIRIGIR_OTRA_AREA`) se publican en
+  `opciones-recepcion.ts` con `implementado: false` y el gestor las rechaza
+  con 400. La pantalla las muestra deshabilitadas con la etiqueta "No
+  implementado", y es el backend el que dice cuáles están habilitadas.
+- Los flujos alternativos A1–A6 quedan fuera de alcance.
+- **CU29** no está modelado: `NotificadorCU29Service` solo deja constancia en
+  el log.
+- No hay autenticación: el frontend usa siempre la sesión `1`. La URL del
+  backend está fija en el service de Angular.
+- **La recepción en curso vive en memoria:** se pierde al reiniciar el
+  backend y no sirve con más de una instancia.
+- **El gestor está acoplado a TypeORM:** no hay tests unitarios puros del
+  flujo. Se testea contra Postgres real (integración y e2e). Los tests de
+  dominio sí son unitarios puros.
+- **Hace falta Docker** para desarrollar y correr los tests. No hay modo
+  SQLite ni base embebida.
 - El listado inicial reconstruye el agregado completo de cada bolsín para que
-  el dominio pueda responder `sosEnviado()` y `obtenerCMOrigen()`. Es una
-  consulta más pesada que traer solo las columnas de la grilla; con el volumen
-  del TP es irrelevante, y a cambio el dominio deja de ser decorativo. Si
-  alguna vez pesa, la salida hexagonal es un puerto de consulta aparte
-  (read model) en la capa de aplicación, no volver a filtrar en el gestor.
+  el dominio responda `sosEnviado()`. Con el volumen del TP es irrelevante.
 
 ## Fuente de los diagramas
 
 Los tres PNG y los archivos de modelado (`DiagramaClasesVistaEstaticaPPAI.mdj`
 de StarUML, `DiagramaSecuenciaPPAI.eapx` de Enterprise Architect) están en la
 carpeta de Drive de la Entrega 1 del grupo. Los diagramas Mermaid de este
-README son reconstrucciones fieles hechas a partir de esos archivos (el `.mdj`
-se pudo parsear como JSON; el `.eapx`, al ser una base Access binaria, se leyó
-desde su export en PNG) y sirven para no depender de abrir StarUML/Enterprise
-Architect para entender el diseño.
+README son reconstrucciones hechas a partir de esos archivos. El `.mdj` se
+pudo parsear como JSON; el `.eapx`, al ser una base Access binaria, se leyó
+desde su export en PNG. Sirven para entender el diseño sin abrir StarUML ni
+Enterprise Architect.
 
 ## Ejecución
 
-Requiere Node.js 20 o superior. Desde la raíz:
+Requisitos: **Node.js 20.19+** y **Docker Desktop** (o Docker Engine con
+Compose v2) corriendo. No hace falta instalar Postgres.
 
 ```bash
+cp .env.example .env    # credenciales locales por defecto
+npm run db:up           # Postgres 16 en localhost:5432 (bases tpi_bolsin y tpi_bolsin_test)
 npm install
 npm run db:migrate
 npm run db:seed
+npm run dev             # backend :3000 + frontend :4200
 ```
 
-Luego, para levantar backend y frontend juntos en una sola terminal:
+`npm run dev:backend` y `npm run dev:frontend` levantan cada uno por separado.
 
-```bash
-npm run dev
+Variables (`.env`, solo se versiona `.env.example`):
+
 ```
-
-También se puede levantar cada uno por separado, en terminales distintas:
-
-```bash
-npm run dev:backend
-npm run dev:frontend
+DATABASE_URL=postgres://tpi:tpi@localhost:5432/tpi_bolsin
+TEST_DATABASE_URL=postgres://tpi:tpi@localhost:5432/tpi_bolsin_test
 ```
-
-La interfaz queda disponible en `http://localhost:4200` y la API en
-`http://localhost:3000/api`.
 
 ## Migraciones y semillas
 
-```bash
-npm run db:migrate
-npm run db:seed
-```
+| script | qué hace |
+|---|---|
+| `npm run db:up` / `db:down` | levanta / baja el contenedor `db` (`docker-compose.yml`) |
+| `npm run db:migrate` | aplica las migraciones de TypeORM (`backend/src/database/migrations`) |
+| `npm run db:revert` | deshace la última migración |
+| `npm run db:seed` | carga el escenario de demo |
+| `npm run db:reset` | baja el contenedor **borrando el volumen**, lo levanta, migra y siembra |
 
-`db:migrate` aplica las migraciones de Prisma (`backend/prisma/migrations`),
-incluyendo el pase de `numeroPrecinto` y `Numero` de remito a tipo numérico.
-`db:seed` ejecuta `backend/prisma/seed.ts` y carga un escenario repetible:
-sesión `1`, comisión médica de destino y tres de origen, y cinco bolsines
-(`BOL-2026-001` a `BOL-2026-005`) cada uno con sus remitos y documentación
-en estado `Enviado`/`EnBolsinEnviado`, listos para recibir desde la interfaz.
-Los `upsert` evitan duplicar datos al volver a correr la semilla.
+El esquema cambia **solo** con migraciones (`synchronize: false`). La segunda
+migración pasa `bolsin.numero_precinto` y `remito.numero` a `integer`.
+
+El seed carga la sesión `1`, una comisión médica de destino (Córdoba), tres de
+origen y cinco bolsines con precinto 1 a 5 (en pantalla, `BOL-2026-001` a
+`BOL-2026-005`). Cada bolsín tiene sus remitos y documentación en estado
+`Enviado` / `EnBolsinEnviado`, listos para recibir. Es idempotente: correrlo
+otra vez no duplica nada y deja los cinco bolsines de nuevo en `Enviado`.
+
+Para mirar la base:
+
+```bash
+docker compose exec db psql -U tpi -d tpi_bolsin
+```
 
 ## Navegación
 
-Al ingresar se muestra el **panel de control**, con el usuario logueado y las
-opciones disponibles. Desde ahí se accede a:
-
-- `/panel` — panel de control (pantalla inicial).
-- `/recepcion-bolsin` — registrar recepción de bolsín, con opción de
-  **cancelar** la recepción en curso y volver al panel.
+- `/panel`: pantalla inicial, con el usuario logueado y su comisión médica.
+- `/recepcion-bolsin`: registrar recepción de bolsín. **Cancelar** descarta la
+  recepción en curso en el backend y vuelve al panel.
 
 ## Verificación
+
+Con Postgres levantado (`npm run db:up`):
 
 ```bash
 npm run lint
@@ -690,14 +598,7 @@ npm test
 npm run test:e2e
 ```
 
-Es exactamente lo que corre el CI. `npm test` corre, además de los tests del
-frontend, el **test de arquitectura**
-del backend (`backend/src/arquitectura.spec.ts`): verifica que el dominio no
-dependa de aplicación ni de infraestructura, que la aplicación no dependa de
-infraestructura, que ningún módulo alcance el interior de otro y que ni el
-dominio ni la aplicación importen Prisma o NestJS. Si alguien rompe la regla de
-dependencia, falla nombrando el import culpable.
-
-La semilla utiliza la sesión `1` e incorpora un bolsín completo para probar la
-selección y confirmación. Al finalizar, el bolsín queda `Recibido`, el remito
-`RecibidoYAceptado` y la documentación `Aceptada`.
+Es exactamente lo que corre el CI (`.github/workflows/ci.yml`), que usa un
+service container `postgres:16`. Los tests usan siempre `TEST_DATABASE_URL`,
+aplican las migraciones solos y vacían y vuelven a sembrar las tablas antes
+de cada caso.
