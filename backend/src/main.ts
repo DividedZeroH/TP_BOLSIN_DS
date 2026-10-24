@@ -1,12 +1,10 @@
-import 'dotenv/config';
+import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
+import { configurarApp } from './configurar-app';
 
 async function bootstrap(): Promise<void> {
-  const app = await NestFactory.create(AppModule);
-  app.setGlobalPrefix('api');
-  // Angular se ejecuta en otro puerto durante el desarrollo.
-  app.enableCors({ origin: 'http://localhost:4200' });
+  const app = configurarApp(await NestFactory.create(AppModule));
   await app.listen(Number(process.env.PORT ?? 3000));
 }
 

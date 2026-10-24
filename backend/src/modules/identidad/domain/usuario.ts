@@ -1,4 +1,3 @@
-
 import { Empleado } from './empleado';
 
 export class Usuario {

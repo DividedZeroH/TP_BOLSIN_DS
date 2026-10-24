@@ -37,7 +37,7 @@
               *ngFor="let bolsin of bolsines; trackBy: trackByBolsin"
               [class.selected-row]="bolsinSeleccionado?.id === bolsin.id"
             >
-              <td>{{ bolsin.numeroPrecinto }}</td>
+              <td>{{ formatearPrecinto(bolsin.numeroPrecinto) }}</td>
               <td>{{ bolsin.comisionMedicaOrigen.nombre }}</td>
               <td class="action-col">
                 <button type="button" class="primary-button" (click)="seleccionarBolsin(bolsin)">
@@ -55,12 +55,12 @@
     <span class="step-number">3</span>
     <div class="step-content">
       <h2>Documentacion registrada</h2>
-      <p class="muted">Bolsin con numero de precinto {{ bolsinSeleccionado.numeroPrecinto }}</p>
+      <p class="muted">Bolsin con precinto {{ formatearPrecinto(bolsinSeleccionado.numeroPrecinto) }}</p>
 
       <p *ngIf="cargandoDetalle" class="state-message">Cargando documentacion...</p>
 
       <div *ngIf="detalle && !cargandoDetalle" class="remito-list">
-        <article *ngFor="let remito of detalle.remitos; trackBy: trackByRemito" class="remito-block">
+        <article *ngFor="let remito of remitos; trackBy: trackByRemito" class="remito-block">
           <h3>Remito {{ remito.numero }}</h3>
           <table>
             <thead>
@@ -103,7 +103,7 @@
           *ngFor="let opcion of opcionesRecepcion"
           type="button"
           class="option-button"
-          [class.option-selected]="opcionSeleccionada === opcion.codigo"
+          [class.option-selected]="opcionSeleccionada?.codigo === opcion.codigo"
           [class.option-disabled]="!opcion.implementado"
           [disabled]="!opcion.implementado"
           [title]="
@@ -123,9 +123,9 @@
   <section *ngIf="bolsinSeleccionado && opcionSeleccionada" class="confirm-panel">
     <div class="confirm-copy">
       <h2>Confirmar recepcion</h2>
-      <p>Se registrara la situacion seleccionada para el bolsin.</p>
+      <p>{{ pedidoConfirmacion }}</p>
       <p>
-        Opcion seleccionada: <strong>{{ opcionSeleccionadaTexto }}</strong>
+        Opcion seleccionada: <strong>{{ opcionSeleccionada.descripcion }}</strong>
       </p>
     </div>
     <div class="confirm-actions">

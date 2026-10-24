@@ -1,37 +1,41 @@
+export type AmbitoEstado = 'BOLSIN' | 'REMITO' | 'DOCUMENTACION';
 
+/**
+ * Catálogo único de estados. Los predicados `sos...()` son la única forma de
+ * preguntar por un estado: nadie compara strings fuera de esta clase (Expert).
+ */
 export class Estado {
   constructor(
     public readonly id: number,
-    public readonly Nombre: string,
-    public readonly Ambito: string,
-  
+    public readonly nombre: string,
+    public readonly ambito: AmbitoEstado,
   ) {}
 
   sosEnviado(): boolean {
-    return this.Nombre.toUpperCase() === 'ENVIADO';
-  }
-
-  sosAmbitoBolsin(): boolean {
-    return this.Ambito.toUpperCase() === 'BOLSIN';
+    return this.nombre === 'Enviado';
   }
 
   sosRecibido(): boolean {
-    return this.Nombre.toUpperCase() === 'RECIBIDO';
-  }
-
-  sosAmbitoRemito(): boolean {
-    return this.Ambito.toUpperCase() === 'REMITO';
+    return this.nombre === 'Recibido';
   }
 
   sosRecibidoYAceptado(): boolean {
-    return this.Nombre.toUpperCase() === 'RECIBIDOYACEPTADO';
-  }
-
-  sosAmbitoDocumentacion(): boolean {
-    return this.Ambito.toUpperCase() === 'DOCUMENTACION';
+    return this.nombre === 'RecibidoYAceptado';
   }
 
   sosAceptada(): boolean {
-    return this.Nombre.toUpperCase() === 'ACEPTADA';
+    return this.nombre === 'Aceptada';
+  }
+
+  sosAmbitoBolsin(): boolean {
+    return this.ambito === 'BOLSIN';
+  }
+
+  sosAmbitoRemito(): boolean {
+    return this.ambito === 'REMITO';
+  }
+
+  sosAmbitoDocumentacion(): boolean {
+    return this.ambito === 'DOCUMENTACION';
   }
 }

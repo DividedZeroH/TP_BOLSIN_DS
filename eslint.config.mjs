@@ -5,20 +5,10 @@ import tseslint from 'typescript-eslint';
 /**
  * Configuración única para todo el monorepo (ESLint 9, flat config).
  *
- * Reparto de responsabilidades para hacer cumplir la arquitectura:
- *
- * - Acá viven las reglas de CAPA (dominio / aplicación / infraestructura),
- *   porque son las que conviene ver subrayadas en el editor mientras escribís.
- * - En `backend/src/arquitectura.spec.ts` viven las reglas de MÓDULO (que
- *   ningún subdominio alcance el interior de otro, que cada uno exponga su
- *   API pública). Necesitan resolver rutas relativas y escalan solas cuando se
- *   agrega un módulo nuevo, cosa que un patrón glob no hace.
- *
- * Las dos corren en CI.
+ * Hay una sola regla de capa: las entidades de `domain/` son TypeScript puro.
+ * Todo lo demás (controllers, services, entidades ORM) es NestJS clásico y no
+ * necesita reglas especiales.
  */
-
-const FRAMEWORKS = ['@nestjs/*', '@prisma/client', 'prisma'];
-
 export default tseslint.config(
   {
     ignores: [
@@ -26,7 +16,7 @@ export default tseslint.config(
       '**/dist/**',
       '**/coverage/**',
       'frontend/.angular/**',
-      'backend/prisma/migrations/**',
+      'backend/src/database/migrations/**',
     ],
   },
 
@@ -35,8 +25,8 @@ export default tseslint.config(
 
   {
     rules: {
-      // El proyecto usa nombres del diagrama UML (Numero, Nombre, Ambito),
-      // así que no se fuerza convención de nombres sobre propiedades.
+      // El proyecto usa nombres del diagrama UML, así que no se fuerza
+      // convención de nombres sobre propiedades.
       '@typescript-eslint/no-explicit-any': 'error',
       '@typescript-eslint/no-unused-vars': [
         'error',
@@ -47,7 +37,7 @@ export default tseslint.config(
     },
   },
 
-  // ---- Regla de dependencia hexagonal: capa de dominio ----
+  // ---- Única regla de capa: el dominio no conoce al framework ni al ORM ----
   {
     files: ['backend/src/**/domain/**/*.ts'],
     rules: {
@@ -56,38 +46,9 @@ export default tseslint.config(
         {
           patterns: [
             {
-              group: ['**/application/**', '**/infrastructure/**'],
+              group: ['typeorm', 'typeorm/*', '@nestjs/*'],
               message:
-                'El dominio no puede depender de aplicación ni de infraestructura (regla de dependencia hexagonal).',
-            },
-            {
-              group: FRAMEWORKS,
-              message:
-                'El dominio es TypeScript puro: no puede depender de NestJS ni de Prisma.',
-            },
-          ],
-        },
-      ],
-    },
-  },
-
-  // ---- Regla de dependencia hexagonal: capa de aplicación ----
-  {
-    files: ['backend/src/**/application/**/*.ts'],
-    rules: {
-      'no-restricted-imports': [
-        'error',
-        {
-          patterns: [
-            {
-              group: ['**/infrastructure/**'],
-              message:
-                'La capa de aplicación no puede depender de infraestructura: definí un puerto.',
-            },
-            {
-              group: FRAMEWORKS,
-              message:
-                'La capa de aplicación no depende de frameworks. Usá errores propios en vez de excepciones HTTP y puertos en vez de servicios de NestJS.',
+                'Las entidades de dominio no dependen del framework ni del ORM: los decoradores de TypeORM van en persistence/*.orm-entity.ts y el mapper traduce entre ambos.',
             },
           ],
         },
@@ -114,11 +75,9 @@ export default tseslint.config(
 
   // Los tests y las semillas pueden usar lo que necesiten.
   {
-    files: ['**/*.spec.ts', '**/*.e2e-spec.ts', 'backend/prisma/seed.ts'],
+    files: ['**/*.spec.ts', '**/*.e2e-spec.ts', 'backend/src/database/seeds/**/*.ts'],
     rules: {
-      'no-restricted-imports': 'off',
       'no-console': 'off',
-      '@typescript-eslint/no-require-imports': 'off',
     },
   },
 );

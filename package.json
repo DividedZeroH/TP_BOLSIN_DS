@@ -10,19 +10,24 @@
     "dev": "concurrently -n backend,frontend -c blue,green \"npm run start:dev --workspace backend\" \"npm run start --workspace frontend\"",
     "dev:backend": "npm run start:dev --workspace backend",
     "dev:frontend": "npm run start --workspace frontend",
+    "db:up": "docker compose up -d --wait db",
+    "db:down": "docker compose down",
+    "db:migrate": "npm run db:migrate --workspace backend",
+    "db:revert": "npm run db:revert --workspace backend",
+    "db:seed": "npm run db:seed --workspace backend",
+    "db:reset": "docker compose down -v && npm run db:up && npm run db:migrate && npm run db:seed",
     "build": "npm run build --workspace backend && npm run build --workspace frontend",
     "test": "npm run test --workspace backend && npm run test --workspace frontend -- --watch=false",
     "test:e2e": "npm run test:e2e --workspace backend",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "db:migrate": "npm run prisma:migrate --workspace backend",
-    "db:seed": "npm run prisma:seed --workspace backend",
-    "prisma:generate": "npm run prisma:generate --workspace backend"
+    "format": "prettier --write \"backend/{src,test}/**/*.ts\" \"frontend/src/**/*.{ts,html,css}\""
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
     "concurrently": "^10.0.3",
     "eslint": "^9.39.1",
+    "prettier": "^3.6.2",
     "typescript-eslint": "^8.46.4"
   }
 }

@@ -1,26 +1,28 @@
 import { Module } from '@nestjs/common';
-import { PrismaModule } from '../../platform/persistence/prisma/prisma.module';
-import { PrismaService } from '../../platform/persistence/prisma/prisma.service';
-import { SESION_REPOSITORY } from './application/ports/sesion.repository';
-import { IdentidadMapper } from './infrastructure/persistence/prisma/identidad.mapper';
-import { PrismaSesionRepository } from './infrastructure/persistence/prisma/prisma-sesion.repository';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { ComisionMedicaOrmEntity } from '../organizacion/persistence/comision-medica.orm-entity';
+import { EmpleadoOrmEntity } from './persistence/empleado.orm-entity';
+import { SesionOrmEntity } from './persistence/sesion.orm-entity';
+import { UsuarioOrmEntity } from './persistence/usuario.orm-entity';
+import { SesionController } from './sesion.controller';
+import { SesionService } from './sesion.service';
 
 /**
- * Subdominio de soporte: quién está logueado. Resuelve la navegación
- * `Sesion -> Usuario -> Empleado` que el CU28 necesita para saber a qué
- * comisión médica pertenece el usuario.
+ * Quién está logueado: resuelve Sesion -> Usuario -> Empleado -> ComisionMedica.
+ * Organización no tiene módulo propio (solo entidad), así que su tabla se
+ * registra acá.
  */
 @Module({
-  imports: [PrismaModule],
-  providers: [
-    IdentidadMapper,
-    {
-      provide: SESION_REPOSITORY,
-      useFactory: (prisma: PrismaService, mapper: IdentidadMapper) =>
-        new PrismaSesionRepository(prisma, mapper),
-      inject: [PrismaService, IdentidadMapper],
-    },
+  imports: [
+    TypeOrmModule.forFeature([
+      SesionOrmEntity,
+      UsuarioOrmEntity,
+      EmpleadoOrmEntity,
+      ComisionMedicaOrmEntity,
+    ]),
   ],
-  exports: [SESION_REPOSITORY],
+  controllers: [SesionController],
+  providers: [SesionService],
+  exports: [SesionService],
 })
 export class IdentidadModule {}
