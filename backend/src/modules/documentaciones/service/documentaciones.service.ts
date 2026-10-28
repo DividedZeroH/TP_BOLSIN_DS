@@ -5,7 +5,6 @@ import { TipoDocumentacionService } from './tipo-documentacion.service';
 import { CambioEstadoDocumentacionService } from './cambio-estado-documentacion.service';
 import { Estado } from '../../estados/entity/estado.entity';
 import { Empleado } from '../../empleados/entity/empleado.entity';
-import { ComisionMedica } from '../../comisiones-medicas/entity/comision-medica.entity';
 import { ContextoTransaccion } from '../../../shared/transaction/unidad-de-trabajo.interface';
 import {
   DOCUMENTACIONES_REPOSITORY,
@@ -31,12 +30,6 @@ export class DocumentacionesService {
   }
   mostrarTipoDocumentacion(documentacion: Documentacion): string {
     return this.tipos.getNombre(documentacion.tipoDocumentacion);
-  }
-  getCMOrigen(documentacion: Documentacion): ComisionMedica {
-    return documentacion.cmOrigen;
-  }
-  getCambiosEstado(documentacion: Documentacion): readonly CambioEstadoDocumentacion[] {
-    return documentacion.cambiosEstado;
   }
   getEstadoActual(documentacion: Documentacion): CambioEstadoDocumentacion | undefined {
     return documentacion.cambiosEstado.find((cambio) =>
@@ -70,7 +63,8 @@ export class DocumentacionesService {
     if (actual) this.cambiosEstado.setFechaHoraFin(actual, fechaHora);
     this.crearCambioEstado(documentacion, estadoRecibidoYAceptado, empleado, fechaHora);
   }
-  // Métodos de otros CU conservados sin implementación, como en el modelo previo.
+  // Transiciones de otros CU: se declaran por fidelidad al diagrama de clases y
+  // quedan vacías, porque implementarlas sin un CU que las use iría contra YAGNI.
   revision(): void {}
   darDeBaja(): void {}
   actualizarAsignacionDeRemito(): void {}

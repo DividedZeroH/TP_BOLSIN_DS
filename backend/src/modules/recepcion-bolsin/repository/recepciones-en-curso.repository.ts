@@ -1,15 +1,17 @@
-import { Injectable, NotFoundException, OnModuleDestroy } from '@nestjs/common';
+import { Injectable, OnModuleDestroy } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import {
   RecepcionEnCurso,
-  RecepcionesEnCurso,
+  RecepcionesEnCursoRepositoryInterface,
 } from './recepciones-en-curso.repository.interface';
 
 const TTL_MS = 30 * 60 * 1000;
 
 /** En memoria: las recepciones en curso se pierden al reiniciar el backend. */
 @Injectable()
-export class RecepcionEnCursoRepository implements RecepcionesEnCurso, OnModuleDestroy {
+export class RecepcionesEnCursoRepository
+  implements RecepcionesEnCursoRepositoryInterface, OnModuleDestroy
+{
   private readonly recepciones = new Map<string, RecepcionEnCurso>();
   private readonly limpieza = setInterval(() => this.descartarVencidas(), 60 * 1000);
 
@@ -18,12 +20,11 @@ export class RecepcionEnCursoRepository implements RecepcionesEnCurso, OnModuleD
     this.limpieza.unref();
   }
 
-  crear(
-    datos: Pick<RecepcionEnCurso, 'sesionId' | 'comisionMedica' | 'bolsines'>,
-  ): RecepcionEnCurso {
+  crear(datos: Pick<RecepcionEnCurso, 'sesionId' | 'comisionMedica'>): RecepcionEnCurso {
     const recepcion: RecepcionEnCurso = {
       ...datos,
       id: randomUUID(),
+      bolsines: [],
       paso: 'INICIADA',
       creadaEn: new Date(),
     };
@@ -31,17 +32,16 @@ export class RecepcionEnCursoRepository implements RecepcionesEnCurso, OnModuleD
     return recepcion;
   }
 
-  obtener(id: string): RecepcionEnCurso {
+  buscar(id: string): RecepcionEnCurso | undefined {
     const recepcion = this.recepciones.get(id);
-    if (!recepcion || this.estaVencida(recepcion)) {
+    if (recepcion && this.estaVencida(recepcion)) {
       this.recepciones.delete(id);
-      throw new NotFoundException('La recepción no existe o venció.');
+      return undefined;
     }
     return recepcion;
   }
 
   eliminar(id: string): void {
-    this.obtener(id);
     this.recepciones.delete(id);
   }
 

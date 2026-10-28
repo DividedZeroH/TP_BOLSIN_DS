@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
-import { FindOptionsRelations, IsNull } from 'typeorm';
+import { FindOptionsRelations } from 'typeorm';
 import { ContextoPersistencia } from '../../../database/transaction/contexto-persistencia';
+import { guardarHistorialEstados } from '../../../database/historial-estados';
 import { ContextoTransaccion } from '../../../shared/transaction/unidad-de-trabajo.interface';
 import { Bolsin } from '../entity/bolsin.entity';
 import { CambioEstadoBolsin } from '../entity/cambio-estado-bolsin.entity';
@@ -49,27 +50,12 @@ export class BolsinesRepository implements BolsinesRepositoryInterface {
       order: { remitos: { id: 'ASC' } },
     });
   }
-  async guardarCambiosEstado(
-    bolsin: Bolsin,
-    contexto: ContextoTransaccion,
-  ): Promise<void> {
-    const manager = this.persistencia.obtenerManagerTransaccional(contexto);
-    for (const cambio of bolsin.cambiosEstado) {
-      if (cambio.id === undefined) {
-        await manager.insert(CambioEstadoBolsin, {
-          bolsinId: bolsin.id,
-          estadoId: cambio.estadoId,
-          responsableId: cambio.responsableId,
-          fechaHoraInicio: cambio.fechaHoraInicio,
-          fechaHoraFin: cambio.fechaHoraFin,
-        });
-      } else if (cambio.fechaHoraFin !== null) {
-        await manager.update(
-          CambioEstadoBolsin,
-          { id: cambio.id, fechaHoraFin: IsNull() },
-          { fechaHoraFin: cambio.fechaHoraFin },
-        );
-      }
-    }
+  guardarCambiosEstado(bolsin: Bolsin, contexto: ContextoTransaccion): Promise<void> {
+    return guardarHistorialEstados(
+      this.persistencia.obtenerManagerTransaccional(contexto),
+      CambioEstadoBolsin,
+      bolsin.cambiosEstado,
+      { bolsinId: bolsin.id },
+    );
   }
 }

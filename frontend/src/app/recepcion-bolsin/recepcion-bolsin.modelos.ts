@@ -1,3 +1,5 @@
+import { ComisionMedicaVista, UsuarioLogueadoVista } from '../sesion/sesion.modelos';
+
 export const OPCION_CONTENIDO_IGUAL = 'CONTENIDO_IGUAL' as const;
 export const OPCION_FALTA_DOCUMENTACION = 'FALTA_DOCUMENTACION' as const;
 export const OPCION_DOCUMENTACION_NO_CORRESPONDE =
@@ -19,17 +21,6 @@ export interface OpcionRecepcionVista {
    * confirmarse desde la pantalla.
    */
   implementado: boolean;
-}
-
-export interface UsuarioLogueadoVista {
-  id: number;
-  apellido?: string;
-  email?: string;
-}
-
-export interface ComisionMedicaVista {
-  id: number;
-  nombre: string;
 }
 
 export interface BolsinVista {
@@ -75,12 +66,6 @@ export interface ResultadoRecepcionBolsin {
   mensaje: string;
   numeroPrecinto: number;
   fechaHora: string;
-}
-
-/** `GET /sesiones/:id/comision-medica`. */
-export interface SesionVista {
-  usuarioLogueado: UsuarioLogueadoVista;
-  comisionMedica: ComisionMedicaVista;
 }
 
 /** El precinto se guarda como entero; en pantalla se muestra como BOL-2026-001. */

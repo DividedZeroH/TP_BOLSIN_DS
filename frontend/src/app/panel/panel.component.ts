@@ -1,8 +1,8 @@
 import { CommonModule } from '@angular/common';
 import { Component, OnInit } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { SesionVista } from '../recepcion-bolsin/recepcion-bolsin.modelos';
-import { RecepcionBolsinService } from '../recepcion-bolsin/recepcion-bolsin.service';
+import { SesionVista } from '../sesion/sesion.modelos';
+import { SesionService } from '../sesion/sesion.service';
 
 @Component({
   selector: 'app-panel',
@@ -14,10 +14,10 @@ export class PanelComponent implements OnInit {
   sesion?: SesionVista;
   error = false;
 
-  constructor(private readonly recepcionService: RecepcionBolsinService) {}
+  constructor(private readonly sesionService: SesionService) {}
 
   ngOnInit(): void {
-    this.recepcionService.comisionDeSesion().subscribe({
+    this.sesionService.comisionDeSesion().subscribe({
       next: (sesion) => (this.sesion = sesion),
       error: () => (this.error = true),
     });

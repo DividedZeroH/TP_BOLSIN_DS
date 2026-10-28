@@ -50,9 +50,6 @@ export class BolsinesService {
   getNumeroPrecinto(bolsin: Bolsin): number {
     return bolsin.numeroPrecinto;
   }
-  getCambiosEstado(bolsin: Bolsin): readonly CambioEstadoBolsin[] {
-    return bolsin.cambiosEstado;
-  }
   buscarRemitoBolsin(bolsin: Bolsin): Remito[] {
     return bolsin.remitos;
   }

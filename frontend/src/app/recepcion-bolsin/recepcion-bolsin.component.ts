@@ -125,13 +125,7 @@ export class PantallaRegistrarRecepcionBolsin implements OnInit, OnDestroy {
   }
 
   tomarBolsin(bolsin: BolsinVista): void {
-    if (
-      !this.inicio ||
-      this.cargandoDetalle ||
-      this.confirmando ||
-      this.modal?.tipo === 'exito'
-    )
-      return;
+    if (!this.inicio || this.cargandoDetalle || this.bloqueada) return;
     this.bolsinSeleccionado = bolsin;
     this.limpiarDetalle();
     this.cargandoDetalle = true;
@@ -165,14 +159,7 @@ export class PantallaRegistrarRecepcionBolsin implements OnInit, OnDestroy {
   }
 
   tomarOpcion(opcion: OpcionRecepcionVista): void {
-    if (
-      !opcion.implementado ||
-      !this.inicio ||
-      this.confirmando ||
-      this.finalizando ||
-      this.modal?.tipo === 'exito'
-    )
-      return;
+    if (!opcion.implementado || !this.inicio || this.bloqueada) return;
     this.solicitudes.add(
       this.recepcionService
         .tomarOpcion(this.inicio.recepcionId, opcion.codigo)
@@ -194,14 +181,7 @@ export class PantallaRegistrarRecepcionBolsin implements OnInit, OnDestroy {
   }
 
   tomarConfirmacion(): void {
-    if (
-      !this.inicio ||
-      !this.opcionSeleccionada?.implementado ||
-      this.confirmando ||
-      this.finalizando ||
-      this.modal?.tipo === 'exito'
-    )
-      return;
+    if (!this.inicio || !this.opcionSeleccionada?.implementado || this.bloqueada) return;
     this.confirmando = true;
     this.solicitudes.add(
       this.recepcionService.tomarConfirmacion(this.inicio.recepcionId).subscribe({
@@ -303,6 +283,11 @@ export class PantallaRegistrarRecepcionBolsin implements OnInit, OnDestroy {
   }
   trackByDocumentacion(_: number, documentacion: DocumentacionVista): number {
     return documentacion.id;
+  }
+
+  /** Mientras se confirma, se cierra el caso o ya se informó el éxito, no se acepta otra acción. */
+  private get bloqueada(): boolean {
+    return this.confirmando || this.finalizando || this.modal?.tipo === 'exito';
   }
 
   private informarErrorCarga(): void {
