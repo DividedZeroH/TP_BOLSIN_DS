@@ -1,20 +1,19 @@
 // @ts-check
 import eslint from '@eslint/js';
 import tseslint from 'typescript-eslint';
+import arquitectura from './tools/architecture.cjs';
 
 /**
  * Configuración única para todo el monorepo (ESLint 9, flat config).
  *
- * Hay una sola regla de capa: las entidades de `domain/` son TypeScript puro.
- * Todo lo demás (controllers, services, entidades ORM) es NestJS clásico y no
- * necesita reglas especiales.
+ * Las entidades contienen datos y decoradores; la lógica vive en servicios
+ * públicos que consumen contratos de repositorio propios.
  */
 export default tseslint.config(
   {
     ignores: [
       '**/node_modules/**',
       '**/dist/**',
-      '**/coverage/**',
       'frontend/.angular/**',
       'backend/src/database/migrations/**',
     ],
@@ -22,6 +21,12 @@ export default tseslint.config(
 
   eslint.configs.recommended,
   ...tseslint.configs.recommended,
+
+  {
+    files: ['backend/src/modules/**/*.ts'],
+    plugins: { arquitectura },
+    rules: { 'arquitectura/capas': 'error' },
+  },
 
   {
     rules: {
@@ -37,26 +42,7 @@ export default tseslint.config(
     },
   },
 
-  // ---- Única regla de capa: el dominio no conoce al framework ni al ORM ----
-  {
-    files: ['backend/src/**/domain/**/*.ts'],
-    rules: {
-      'no-restricted-imports': [
-        'error',
-        {
-          patterns: [
-            {
-              group: ['typeorm', 'typeorm/*', '@nestjs/*'],
-              message:
-                'Las entidades de dominio no dependen del framework ni del ORM: los decoradores de TypeORM van en persistence/*.orm-entity.ts y el mapper traduce entre ambos.',
-            },
-          ],
-        },
-      ],
-    },
-  },
-
-  // Archivos de configuración en CommonJS (jest.config.js, karma.conf.js).
+  // Utilidades en CommonJS.
   {
     files: ['**/*.js', '**/*.cjs'],
     languageOptions: {
@@ -73,9 +59,9 @@ export default tseslint.config(
     },
   },
 
-  // Los tests y las semillas pueden usar lo que necesiten.
+  // El comando de seed informa su resultado por consola.
   {
-    files: ['**/*.spec.ts', '**/*.e2e-spec.ts', 'backend/src/database/seeds/**/*.ts'],
+    files: ['backend/src/database/seeds/**/*.ts'],
     rules: {
       'no-console': 'off',
     },

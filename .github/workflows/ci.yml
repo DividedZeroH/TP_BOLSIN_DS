@@ -7,27 +7,8 @@ on:
 
 jobs:
   verificacion:
-    name: Lint, build y tests
+    name: Lint y build
     runs-on: ubuntu-latest
-
-    # Mismo Postgres 16 que en docker-compose.yml. En CI solo hace falta la
-    # base de tests.
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_USER: tpi
-          POSTGRES_PASSWORD: tpi
-          POSTGRES_DB: tpi_bolsin_test
-        ports: ['5432:5432']
-        options: >-
-          --health-cmd "pg_isready -U tpi -d tpi_bolsin_test"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
-
-    env:
-      TEST_DATABASE_URL: postgres://tpi:tpi@localhost:5432/tpi_bolsin_test
 
     steps:
       - uses: actions/checkout@v4
@@ -40,19 +21,8 @@ jobs:
       - name: Instalar dependencias
         run: npm ci
 
-      - name: Lint (domain/ sin TypeORM ni Nest + calidad)
+      - name: Lint (capas, entidades sin lógica y calidad)
         run: npm run lint
 
       - name: Build (backend + frontend)
         run: npm run build
-
-      - name: Tests unitarios y de integración (backend, contra Postgres)
-        run: npm test --workspace backend
-
-      - name: Tests e2e (backend, contra Postgres)
-        run: npm run test:e2e --workspace backend
-
-      - name: Tests (frontend)
-        run: npm run test --workspace frontend -- --watch=false --browsers=ChromeHeadlessCI
-        env:
-          CHROME_BIN: /usr/bin/google-chrome

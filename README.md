@@ -27,30 +27,28 @@ funcional suministrados (Entrega 1, PPAI 2026, Grupo 6).
 - Frontend: Angular standalone.
 - Tecnología: Web.
 
-Las clases `PantallaRegistrarRecepcionBolsin` (Boundary),
-`GestorRegistrarRecepcionBolsin` (Control) y las entidades del dominio conservan
-los nombres y responsabilidades del modelo. Los identificadores, DTO, controlador
-HTTP y adaptador de API son elementos técnicos necesarios para implementarlo como
-aplicación web.
+Las clases PantallaRegistrarRecepcionBolsin y GestorRegistrarRecepcionBolsin
+conservan los mensajes del CU28. Las entidades de `entity/` contienen datos,
+relaciones y decoradores de TypeORM; sus métodos del modelo de análisis se
+ejecutan en los servicios correspondientes, manteniendo nombres y comportamiento.
+Los identificadores, DTOs, controlador HTTP y adaptador de API son los elementos
+técnicos de la implementación web.
 
 ## Modelo de dominio
 
-El agregado central es **Bolsin**, que delega en cascada según el diagrama de
-clases del análisis: `Bolsin -> Remito -> DetalleRemito -> Documentacion`. Cada
-entidad que tiene ciclo de vida propio (Bolsin, Documentacion) lo expresa como
-una lista de cambios de estado con fecha de inicio/fin (`CambioEstadoBolsin`,
-`CambioEstadoDocumentacion`), nunca como un campo de estado mutable suelto — el
-estado "actual" es siempre el cambio cuyo `fechaHoraFin` es `null`
-(`sosActual()`). `Estado` es un catálogo único (`Nombre` + `Ambito`) compartido
-por Bolsin, Remito y Documentacion, consultado mediante predicados de dominio
-(`sosEnviado()`, `sosRecibido()`, `sosAmbitoBolsin()`, etc.) en vez de comparar
-strings sueltos fuera de la entidad — es el patrón Expert del diagrama aplicado
-literalmente.
+El agregado central es **Bolsin**, relacionado con Remito → DetalleRemito →
+Documentacion. BolsinesService, RemitosService y DocumentacionesService ejecutan
+esa colaboración. Bolsin y Documentacion conservan sus listas de cambios de
+estado con fecha de inicio/fin; el estado actual es el cambio cuya
+`fechaHoraFin` es `null`, evaluado por `sosActual()` en el servicio.
+Estado es un catálogo único de nombre y ámbito, cargado por seed y consultado
+a través de EstadoService. Sus predicados `sosEnviado()`, `sosRecibido()`
+y `sosAmbitoBolsin()` también viven en el servicio.
 
-`Empleado`, `ComisionMedica`, `Sesion` y `Usuario` son transversales: cualquier
-caso de uso futuro los necesita para saber quién está logueado y a qué comisión
-pertenece, por eso viven en sus propios módulos (`identidad`, `organizacion`) y
-no dentro del módulo de un único CU.
+Empleado, ComisionMedica, Sesion y Usuario están en sus módulos propios porque
+son compartidos por los casos de uso. Los diagramas siguientes representan
+**el modelo de análisis del TP**; la distribución actual de los métodos en
+servicios se detalla en la sección Arquitectura del backend.
 
 ```mermaid
 classDiagram
@@ -194,8 +192,8 @@ classDiagram
 > (`Provincia`, `Localidad`, `Rol`, `Archivo`, superclases genéricas `Pantalla`/
 > `Gestor`) y algunos atributos duplicados por ediciones sucesivas
 > (`numeroPrecinto` repetido, `SosActual`/`sosActual` como variantes). El
-> diagrama de arriba usa la vista curada (PNG), que es la que coincide
-> método a método con el código.
+> diagrama de arriba usa la vista curada (PNG). Sus métodos se implementan
+> actualmente en los servicios propietarios, como se detalla más abajo.
 
 ## Máquina de estados de `Documentacion`
 
@@ -400,105 +398,225 @@ sequenceDiagram
 
 ## Arquitectura del backend
 
-NestJS clásico, organizado por **módulos de dominio**. Cada request recorre
-siempre el mismo camino:
+NestJS organizado por entidad principal, con lógica de negocio en los servicios.
+Cada entidad tiene una sola representación: la clase con decoradores de TypeORM.
 
-```
-controller  →  service (gestor)  →  repositorio TypeORM  →  PostgreSQL
-                    │
-                    └── entidades de dominio (TypeScript puro)
-```
-
-```
+```text
 backend/src/
-├── main.ts / configurar-app.ts   # prefijo /api, ValidationPipe global, CORS
-├── app.module.ts
 ├── database/
-│   ├── configuracion.ts          # lee .env (DATABASE_URL / TEST_DATABASE_URL)
-│   ├── database.module.ts        # @Global(), TypeOrmModule.forRootAsync, synchronize: false
-│   ├── data-source.ts            # DataSource de la CLI (migraciones) y del seed
-│   ├── migrations/               # única forma de cambiar el esquema
-│   └── seeds/seed.ts             # escenario de demo, idempotente
+│   ├── database.module.ts
+│   ├── configuracion.ts
+│   ├── transaction/             # implementación de la transacción compartida
+│   ├── migrations/              # esquema conservado
+│   └── seeds/seed.ts            # catálogo de estados y escenario de demo
+├── shared/transaction/
+│   └── unidad-de-trabajo.interface.ts
 └── modules/
-    ├── recepcion-bolsin/         # CU28
-    │   ├── recepcion-bolsin.controller.ts
-    │   ├── gestor-registrar-recepcion-bolsin.service.ts
-    │   ├── recepcion-en-curso.store.ts   # pasos con estado, en memoria
-    │   ├── notificador-cu29.service.ts   # <<include>> CU29 (solo log)
-    │   ├── opciones-recepcion.ts         # catálogo de las 4 situaciones
-    │   ├── bolsin.mapper.ts              # ORM -> dominio
-    │   ├── dto/                          # solicitudes (class-validator) y respuestas
-    │   ├── persistence/                  # *.orm-entity.ts (decoradores de TypeORM)
-    │   └── domain/                       # Bolsin, Remito, DetalleRemito, Documentacion, ...
-    ├── identidad/                # Sesion -> Usuario -> Empleado; SesionService y SesionController
-    ├── catalogo/                 # Estado y EstadoService
-    └── organizacion/             # ComisionMedica (solo dominio, entidad ORM y mapper)
+    ├── bolsines/                # Bolsin y CambioEstadoBolsin
+    ├── remitos/                 # Remito y DetalleRemito
+    ├── documentaciones/         # Documentacion, CambioEstadoDocumentacion, TipoDocumentacion
+    ├── usuarios/                # Usuario
+    ├── empleados/               # Empleado
+    ├── sesiones/                # Sesion y endpoint del panel
+    ├── comisiones-medicas/      # ComisionMedica
+    ├── estados/                # Estado y predicados del catálogo
+    └── recepcion-bolsin/        # GestorRegistrarRecepcionBolsin, coordinador CU28
 ```
 
-- **`domain/` es TypeScript puro.** Las clases del diagrama no tienen
-  decoradores, ni de Nest ni de TypeORM. Las tablas se describen aparte, en
-  `persistence/*.orm-entity.ts`, y los mappers (`bolsin.mapper.ts`,
-  `sesion.mapper.ts`, `estado.mapper.ts`) reconstruyen el agregado de dominio
-  a partir de las entidades ORM cargadas con `relations` explícitas.
-- **El gestor es un `@Injectable()` común.** Inyecta
-  `Repository<BolsinOrmEntity>`, `DataSource`, `SesionService` y
-  `EstadoService`, y lanza `NotFoundException` / `BadRequestException`. Tiene
-  un método por mensaje del diagrama de secuencia, en el mismo orden.
-- **Confirmación atómica.** `tomarConfirmacion()` corre dentro de
-  `dataSource.transaction(...)`. Primero bloquea el bolsín
-  (`SELECT … FOR UPDATE`) y lo relee. Después el dominio aplica las reglas
-  (`registrarCambioEstadoBolsin`, `actualizarEstadoRemito`,
-  `actualizarDocumentacion`) y recién ahí se persisten los cambios: se cierra
-  el cambio actual (`fecha_hora_fin`) y se inserta el nuevo con su
-  responsable. El CU29 se notifica después del commit.
-- **Recepción en curso.** La secuencia exige cuatro mensajes con estado
-  (`nuevaRecepcionBolsin` → `tomarBolsin` → `tomarOpcion` →
-  `tomarConfirmacion`). Lo tomado entre uno y otro vive en
-  `RecepcionEnCursoStore`, un `Map` en memoria keyed por `recepcionId` (UUID)
-  con TTL de 30 minutos. No va en campos del gestor porque el gestor es
-  singleton y mezclaría usuarios. Los pasos fuera de orden responden 400.
+Cada módulo usa únicamente las carpetas que necesita de esta estructura:
+
+```text
+modulo/
+├── controller/                 # endpoints y DTOs de entrada
+├── service/                    # lógica, métodos del modelo y respuestas del CU
+├── entity/                     # atributos, relaciones y decoradores de TypeORM
+├── repository/
+│   ├── modulo.repository.interface.ts
+│   └── modulo.repository.ts
+└── modulo.module.ts
+```
+
+Solo sesiones y recepcion-bolsin tienen controllers porque son los módulos que
+atienden rutas existentes del frontend. No se crean endpoints CRUD ni carpetas
+vacías. Recepcion-bolsin no tiene una entidad de BD: su recepción en curso
+continúa en memoria, con interfaz e implementación en `repository/`.
+El catálogo de opciones permanece en `opciones-recepcion.ts`, junto al módulo.
+
+| Carpeta | Responsabilidad |
+|---|---|
+| `controller/` | Recibir solicitudes HTTP, validar el formato con DTOs y llamar al servicio del propio módulo. |
+| `service/` | Ejecutar toda la lógica de negocio, incluidos `sosEnviado()`, `sosActual()`, `recibir()`, getters y cambios de estado. |
+| `entity/` | Definir datos, tablas, columnas y relaciones. Sin métodos, constructores ni lógica de negocio. |
+| `repository/` | Declarar un contrato propio e implementar consultas, escrituras, carga de relaciones y bloqueos. |
+
+Ya no hay `domain/`, `persistence/` ni `mapper/`: el repositorio devuelve
+directamente las entidades cargadas por TypeORM. Los servicios usan sus campos
+sin importar conexiones o utilidades del ORM.
+
+Los contratos se inyectan con tokens explícitos, por ejemplo
+`@Inject(BOLSINES_REPOSITORY)` y
+`{ provide: BOLSINES_REPOSITORY, useClass: BolsinesRepository }`.
+Cada implementación declara `implements`; cada módulo exporta sus servicios,
+manteniendo privados sus repositorios.
+
+### Métodos del modelo en servicios
+
+Los nombres y comportamientos se conservan. Al ser métodos del servicio,
+reciben como primer argumento la entidad sobre la que operan:
+
+```ts
+bolsinesService.sosEnviado(bolsin);
+bolsinesService.registrarCambioEstadoBolsin(bolsin, estado, empleado, fechaHora);
+documentacionesService.recibir(documentacion, estado, empleado, fechaHora);
+```
+
+| Clases de los diagramas de análisis | Servicio que ejecuta sus métodos |
+|---|---|
+| Bolsin | BolsinesService |
+| CambioEstadoBolsin | CambioEstadoBolsinService |
+| Remito | RemitosService |
+| DetalleRemito | DetalleRemitoService |
+| Documentacion | DocumentacionesService |
+| CambioEstadoDocumentacion | CambioEstadoDocumentacionService |
+| TipoDocumentacion | TipoDocumentacionService |
+| Estado | EstadoService |
+| Sesion | SesionService |
+| Usuario | UsuariosService |
+| Empleado | EmpleadosService |
+| ComisionMedica | ComisionesMedicasService |
+
+La actualización conserva el recorrido Bolsin → Remito → DetalleRemito →
+Documentacion, ejecutado por BolsinesService → RemitosService →
+DetalleRemitoService → DocumentacionesService. El gestor conserva los mensajes del CU28 y coordina
+estos servicios. El estado actual sigue siendo el cambio cuya
+`fechaHoraFin === null`.
+
+La sesión se resuelve con SesionService → UsuariosService → EmpleadosService →
+ComisionesMedicasService. Cada servicio obtiene los datos de su propio
+repositorio y resuelve las referencias mediante el servicio propietario.
+
+### Estados cargados por seed
+
+`npm run db:seed` carga el catálogo persistido mediante
+`sembrarEstados()`, que hace upsert por nombre y ámbito:
+
+| Ámbito | Estados |
+|---|---|
+| BOLSIN | Enviado, Recibido |
+| REMITO | Enviado, RecibidoYAceptado |
+| DOCUMENTACION | EnBolsinEnviado, RecibidoYAceptado |
+
+El seed se puede repetir sin duplicar estados ni cambiar sus identificadores.
+Los servicios consultan esos registros en PostgreSQL; no construyen instancias
+de Estado con IDs fijos ni inventan estados faltantes. Los nombres usados para
+consultar o evaluar un registro son los del catálogo. Si falta un estado
+requerido, se conserva el error HTTP correspondiente.
+
+La migración `EstadoDocumentacionSecuencia1793145600000` cambia el nombre
+anterior `Aceptada` a `RecibidoYAceptado`, conservando el ID histórico y las
+referencias de los cambios de estado. Si el seed nuevo ya creó el otro nombre,
+la migración reúne ambos registros. Se aplica con `npm run db:migrate`, sin
+reiniciar la base ni volver a generar los bolsines existentes.
+
+### Ejemplo: confirmar la recepción del precinto 1
+
+1. El controller recibe
+   `POST /api/recepciones-bolsines/:recepcionId/confirmacion` y llama a
+   `GestorRegistrarRecepcionBolsin.tomarConfirmacion()`.
+2. El gestor valida los pasos de selección, obtiene el empleado por
+   SesionService e inicia una unidad de trabajo con `UNIDAD_DE_TRABAJO`.
+3. La infraestructura abre **una transacción READ COMMITTED** y entrega un
+   contexto opaco, sin conexiones ni repositorios en su contrato.
+4. BolsinesService solicita a su repositorio el bloqueo
+   `SELECT ... FOR UPDATE` y la relectura posterior. El gestor revalida comisión
+   y estado Enviado mediante los servicios.
+5. EstadoService consulta los estados del catálogo dentro del mismo contexto.
+   BolsinesService aplica `registrarCambioEstadoBolsin()` y coordina
+   `actualizarEstadoRemito()` y `actualizarDocumentacion()`. Las reglas cierran
+   cambios y generan los nuevos con fecha y responsable.
+6. BolsinesService, RemitosService y DocumentacionesService persisten las
+   modificaciones con sus respectivos repositorios y **el mismo contexto**.
+   Solo la infraestructura lo resuelve al EntityManager compartido.
+7. Cualquier fallo revierte las tres escrituras y conserva la recepción para
+   reintentar. Las escrituras y el bloqueo exigen un contexto activo.
+8. Después del commit se invoca CU29 y se conserva el resultado con el paso
+   `CONFIRMADA`. Angular ejecuta `informarEjecucionExitosa()` y muestra el aviso.
+9. Al aceptar el aviso, la pantalla solicita `finDelCU()`: el backend elimina
+   la recepción en memoria y Angular vuelve al panel, destruyendo la pantalla.
+
+Dos confirmaciones simultáneas se serializan por el bloqueo del bolsín. La
+segunda relee el estado confirmado y devuelve 400, sin duplicar recepciones ni
+notificaciones.
+
+Un reintento de la misma recepción ya confirmada devuelve su resultado guardado,
+sin volver a persistir ni invocar CU29.
+
+`RecepcionesEnCurso`, inyectado mediante `RECEPCIONES_EN_CURSO`, conserva
+su implementación en memoria (`RecepcionEnCursoRepository`), el Map, el TTL de
+30 minutos y el barrido. La respuesta inicial devuelve usuario y comisión;
+el listado se solicita después de mostrar la comisión. El cierre tiene una
+petición propia para ocurrir después de informar el éxito.
 
 ### API
 
 | Mensaje de la secuencia | Endpoint | Body |
 |---|---|---|
 | `nuevaRecepcionBolsin()` | `POST /api/recepciones-bolsines` | `{ sesionId }` |
+| búsqueda después de mostrar la comisión | `GET /api/recepciones-bolsines/:recepcionId/bolsines` | — |
 | (rehidratar pantalla) | `GET /api/recepciones-bolsines/:recepcionId` | — |
 | `tomarBolsin()` | `POST /api/recepciones-bolsines/:recepcionId/bolsin` | `{ numeroPrecinto }` |
 | `tomarOpcion()` → `pedirConfirmacion()` | `POST /api/recepciones-bolsines/:recepcionId/opcion` | `{ codigo }` |
-| `tomarConfirmacion()` → `finDelCU()` | `POST /api/recepciones-bolsines/:recepcionId/confirmacion` | `{}` |
+| `tomarConfirmacion()` | `POST /api/recepciones-bolsines/:recepcionId/confirmacion` | `{}` |
+| `finDelCU()` después de informar el éxito | `POST /api/recepciones-bolsines/:recepcionId/fin` | `{}` (204) |
 | cancelar | `DELETE /api/recepciones-bolsines/:recepcionId` | — (204) |
 | panel | `GET /api/sesiones/:id/comision-medica` | — |
 
 ## Cómo se hace cumplir la arquitectura
 
-- **Una sola regla de ESLint** (`eslint.config.mjs`): nada dentro de
-  `backend/src/**/domain/**` puede importar `typeorm` ni `@nestjs/*`. El
-  mensaje del error explica dónde va cada cosa.
-- **Tests de integración y e2e contra Postgres real.** Recorren el flujo
-  completo y los casos de error, y verifican en la base que el bolsín quedó
-  `Recibido`, los remitos `RecibidoYAceptado` y la documentación `Aceptada`,
-  con los cambios anteriores cerrados.
+- ESLint aplica `arquitectura/capas` (`tools/architecture.cjs`): exige entidades
+  sin métodos, bloquea utilidades de TypeORM y conexiones en servicios y
+  controllers, y rechaza repositorios ajenos o concretos desde servicios.
+- También impide repositorios que consuman servicios, exportaciones de
+  repositorios desde módulos y construcción manual de Estado en producción.
+  Cubre imports de tipos, imports dinámicos y reexportaciones.
+## Trazabilidad: diagrama de secuencia y código
 
-## Trazabilidad: hallazgos de coherencia entre diagramas y código
+Comparación con la página 3 de PPAI2026_G6_E1_Analisis.pdf (Entrega 1,
+diagrama de secuencia del CU28):
 
-1. **La máquina de estados explica el alcance real de las "opciones" de
-   recepción.** Solo la rama que termina en `Aceptada` existe en el backend:
-   el seed crea únicamente `EnBolsinEnviado` y `Aceptada` para
-   `DOCUMENTACION`. `Redirigida`, `Rechazada` y `NoRecibida` no aparecen en
-   ningún lado del código.
-2. **Getters fuera del diagrama.** Para persistir el agregado después de que
-   el dominio aplica la regla, `Bolsin` y `Documentacion` exponen
-   `getCambiosEstado()` y `Remito` expone `getEstado()`. No figuran en el
-   diagrama de clases. Son de solo lectura y no cambian ningún comportamiento
-   modelado.
-3. **`buscarEstadosRecibidoYAceptado()`** se nombra como en el diagrama de
-   secuencia (en plural) y devuelve el estado del remito y el de la
-   documentación. El diagrama de clases lo escribe en singular.
-4. `nuevaRecepcionBolsin()` usa los métodos del dominio igual que los loops
-   `LoopBolsin` / `LoopBolsinPrecinto` / `LoopBolsinCM` de la secuencia:
-   `sosEnviado()`, `obtenerTuCMDestino()`, `getNumeroPrecinto()` y
-   `obtenerCMOrigen()`.
+| Paso del diagrama | Implementación actual |
+|---|---|
+| registrarRecepcionBolsin / abrirVentana / nuevaRecepcionBolsin | PantallaRegistrarRecepcionBolsin inicia en ngOnInit → registrarRecepcionBolsin → abrirVentana → POST → GestorRegistrarRecepcionBolsin.nuevaRecepcionBolsin. |
+| buscarUsuarioLogueado / buscarComisionMedicaUsuario | El gestor recorre SesionService → UsuariosService → EmpleadosService → ComisionesMedicasService. |
+| mostrarComisionMedicaUsuario | Angular muestra y renderiza la comisión antes de solicitar el listado de bolsines. |
+| buscarBolsinEnviadoCMUsuario / validarComisionMedicaBolsin / buscarPrecintoBolsin / buscarComisionMedicaBolsin | Se evalúan los cambios actuales con sosEnviado, la comisión destino, los precintos y las comisiones origen. |
+| mostrarDatosBolsinesParaSeleccion | Angular presenta los precintos y comisiones de origen recibidos del listado. |
+| tomarBolsin / buscarRemitoBolsin / getNumero | El gestor obtiene los remitos y sus números antes de buscar documentación. |
+| buscarDocumentacionBolsin / buscarDocumentacion / mostrarTipoDocumentacion / getNombre / getAsunto | Se recorre cada remito y detalle. Para cada documento se consulta su tipo, el nombre del tipo y después el asunto. |
+| mostrarDocumentacionBolsin / mostrarOpcionesRecepcionParaSeleccion | La pantalla ejecuta estos dos métodos en ese orden y agrupa la documentación por remito. |
+| tomarOpcion / pedirConfirmacion | El gestor valida la opción y devuelve el mensaje de confirmación que muestra Angular. |
+| tomarConfirmacion / buscarEstadoRecibidoBolsin / getFechaHoraActual / registrarCambioEstadoBolsin | Dentro de una sola transacción se bloquea y revalida el bolsín, se busca Recibido y recién entonces se toma la fecha, se cierra el cambio anterior y se crea el nuevo. |
+| buscarEstadosRecibidoYAceptado / actualizarEstadoRemito / actualizarDocumentacion | Se consultan los estados en la BD y se conserva la cascada de bolsín, remitos, detalles y documentación, ejecutada por servicios. |
+| llamarCU29 / informarEjecucionExitosa / finDelCU | Después del commit se invoca al notificador y la pantalla informa el éxito. Al aceptar el aviso, se solicita finDelCU, se libera la recepción en memoria y se vuelve al panel, destruyendo la pantalla. |
+
+Los mensajes tienen métodos identificables y conservan el orden del diagrama.
+Por la arquitectura solicitada, cada participante del modelo ejecuta sus
+métodos en el servicio correspondiente; entity contiene solo datos y
+decoradores. Se conservan las consultas, el bloqueo, la revalidación y la
+transacción necesarios para persistir con seguridad. El transporte HTTP separa
+el inicio, la búsqueda y el cierre para respetar los momentos en que la
+pantalla presenta la comisión y el resultado.
+
+Hay una inconsistencia en el PDF: el diagrama de secuencia rotula el nuevo
+cambio de documentación como RecibidoYAceptado, mientras la máquina de estados
+de la página 5 define el destino como Aceptada. Para seguir el diagrama de
+secuencia, DOCUMENTACION y REMITO usan RecibidoYAceptado. La máquina de estados
+reproducida arriba conserva las etiquetas del documento original. El seed y
+la migración reflejan el nombre elegido para la implementación.
+
+CU29 conserva una invocación después del commit, implementada como registro en
+el log. No se implementa el caso de uso de notificación completo ni los flujos
+alternativos. La opción implementada sigue siendo CONTENIDO_IGUAL.
 
 ## Limitaciones conocidas / fuera de alcance
 
@@ -515,13 +633,10 @@ backend/src/
   backend está fija en el service de Angular.
 - **La recepción en curso vive en memoria:** se pierde al reiniciar el
   backend y no sirve con más de una instancia.
-- **El gestor está acoplado a TypeORM:** no hay tests unitarios puros del
-  flujo. Se testea contra Postgres real (integración y e2e). Los tests de
-  dominio sí son unitarios puros.
-- **Hace falta Docker** para desarrollar y correr los tests. No hay modo
-  SQLite ni base embebida.
+- **Hace falta PostgreSQL** (Docker en el entorno local) para ejecutar el sistema.
+  No hay modo SQLite ni base embebida.
 - El listado inicial reconstruye el agregado completo de cada bolsín para que
-  el dominio responda `sosEnviado()`. Con el volumen del TP es irrelevante.
+  BolsinesService evalúe `sosEnviado()`. Con el volumen del TP es irrelevante.
 
 ## Fuente de los diagramas
 
@@ -540,7 +655,7 @@ Compose v2) corriendo. No hace falta instalar Postgres.
 
 ```bash
 cp .env.example .env    # credenciales locales por defecto
-npm run db:up           # Postgres 16 en localhost:5432 (bases tpi_bolsin y tpi_bolsin_test)
+npm run db:up           # Postgres 16 en localhost:5432 (base tpi_bolsin)
 npm install
 npm run db:migrate
 npm run db:seed
@@ -553,7 +668,6 @@ Variables (`.env`, solo se versiona `.env.example`):
 
 ```
 DATABASE_URL=postgres://tpi:tpi@localhost:5432/tpi_bolsin
-TEST_DATABASE_URL=postgres://tpi:tpi@localhost:5432/tpi_bolsin_test
 ```
 
 ## Migraciones y semillas
@@ -589,19 +703,22 @@ docker compose exec db psql -U tpi -d tpi_bolsin
 
 ## Verificación
 
-Con Postgres levantado (`npm run db:up`):
-
 ```bash
 npm run lint
 npm run build
-npm test
-npm run test:e2e
 ```
 
-Es exactamente lo que corre el CI (`.github/workflows/ci.yml`), que usa un
-service container `postgres:16`. Los tests usan siempre `TEST_DATABASE_URL`,
-aplican las migraciones solos y vacían y vuelven a sembrar las tablas antes
-de cada caso.
+El CI ejecuta estos dos controles sin requerir una base de datos.
+Por solicitud del usuario se retiraron todas las suites automáticas de pruebas,
+fixtures, configuraciones y comandos asociados. Los controles de arquitectura
+continúan formando parte de ESLint.
+
+Para comprobar el recorrido con la aplicación iniciada:
+
+1. Abrir /panel y entrar a Registrar recepción de bolsín.
+2. Seleccionar un bolsín y revisar sus remitos y documentación.
+3. Elegir CONTENIDO_IGUAL y confirmar.
+4. Comprobar el mensaje exitoso y que el bolsín ya no figure entre los enviados.
 
 ## Flujo de colaboración y gestión de ramas
 
@@ -636,10 +753,8 @@ Para mantener la coherencia del diseño, la estabilidad del código y el paso ex
 4. **Verificación previa al push:**
    Antes de subir cambios al remoto, verificar que toda la suite pase localmente:
    ```bash
-   npm run lint        # Valida que domain/ no importe TypeORM ni NestJS
+   npm run lint        # Verifica capas, repositorios propios y entidades sin lógica
    npm run build       # Compila backend y frontend
-   npm test            # Tests unitarios y de integración contra Postgres
-   npm run test:e2e    # Flujo end-to-end de endpoints HTTP
    ```
 5. **Crear Pull Request (PR):**
    - Abrir el PR hacia `main`.
@@ -647,7 +762,7 @@ Para mantener la coherencia del diseño, la estabilidad del código y el paso ex
    - Esperar la ejecución en verde del pipeline de CI (`.github/workflows/ci.yml`).
    - Solicitar revisión y aprobación de al menos un colaborador antes del merge.
 6. **Integridad arquitectónica (Reglas no negociables):**
-   - **`domain/` en TypeScript puro:** No agregar decoradores ni librerías externas en entidades de dominio.
+   - **Entidades sin lógica:** Los decoradores y datos van en `entity/`; los métodos y reglas de negocio van en `service/`.
    - **Nombres del modelo:** Respetar estrictamente los nombres de clases y métodos del diagrama de clases y de secuencia suministrados.
    - **Esquema de base de datos:** Cualquier cambio en tablas o columnas debe realizarse exclusivamente a través de migraciones de TypeORM (`npm run db:migrate`), nunca mediante `synchronize: true`.
 

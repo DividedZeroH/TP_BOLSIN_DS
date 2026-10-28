@@ -1,6 +1,6 @@
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 
-/** Configuración HTTP compartida por `main.ts` y los tests e2e. */
+/** Configuración HTTP de la aplicación. */
 export function configurarApp(app: INestApplication): INestApplication {
   app.setGlobalPrefix('api');
   app.useGlobalPipes(

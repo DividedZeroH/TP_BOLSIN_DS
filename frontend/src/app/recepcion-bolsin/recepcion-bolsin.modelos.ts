@@ -1,6 +1,7 @@
 export const OPCION_CONTENIDO_IGUAL = 'CONTENIDO_IGUAL' as const;
 export const OPCION_FALTA_DOCUMENTACION = 'FALTA_DOCUMENTACION' as const;
-export const OPCION_DOCUMENTACION_NO_CORRESPONDE = 'DOCUMENTACION_NO_CORRESPONDE' as const;
+export const OPCION_DOCUMENTACION_NO_CORRESPONDE =
+  'DOCUMENTACION_NO_CORRESPONDE' as const;
 export const OPCION_REDIRIGIR_OTRA_AREA = 'REDIRIGIR_OTRA_AREA' as const;
 
 export type CodigoOpcionRecepcion =
@@ -42,6 +43,10 @@ export interface InicioRecepcion {
   recepcionId: string;
   usuarioLogueado: UsuarioLogueadoVista;
   comisionMedica: ComisionMedicaVista;
+}
+
+/** Se carga después de mostrarComisionMedicaUsuario. */
+export interface BolsinesParaSeleccion {
   bolsines: BolsinVista[];
 }
 

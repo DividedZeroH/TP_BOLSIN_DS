@@ -1,35 +1,33 @@
+import { UsuariosModule } from '../usuarios/usuarios.module';
+import { EmpleadosModule } from '../empleados/empleados.module';
+import { ComisionesMedicasModule } from '../comisiones-medicas/comisiones-medicas.module';
 import { Module } from '@nestjs/common';
-import { TypeOrmModule } from '@nestjs/typeorm';
-import { CatalogoModule } from '../catalogo/catalogo.module';
-import { IdentidadModule } from '../identidad/identidad.module';
-import { GestorRegistrarRecepcionBolsin } from './gestor-registrar-recepcion-bolsin.service';
-import { NotificadorCU29Service } from './notificador-cu29.service';
-import { BolsinOrmEntity } from './persistence/bolsin.orm-entity';
-import { CambioEstadoBolsinOrmEntity } from './persistence/cambio-estado-bolsin.orm-entity';
-import { CambioEstadoDocumentacionOrmEntity } from './persistence/cambio-estado-documentacion.orm-entity';
-import { DetalleRemitoOrmEntity } from './persistence/detalle-remito.orm-entity';
-import { DocumentacionOrmEntity } from './persistence/documentacion.orm-entity';
-import { RemitoOrmEntity } from './persistence/remito.orm-entity';
-import { TipoDocumentacionOrmEntity } from './persistence/tipo-documentacion.orm-entity';
-import { RecepcionBolsinController } from './recepcion-bolsin.controller';
-import { RecepcionEnCursoStore } from './recepcion-en-curso.store';
-
-/** CU28 — Registrar recepción de bolsín. */
+import { BolsinesModule } from '../bolsines/bolsines.module';
+import { RemitosModule } from '../remitos/remitos.module';
+import { DocumentacionesModule } from '../documentaciones/documentaciones.module';
+import { SesionesModule } from '../sesiones/sesiones.module';
+import { EstadosModule } from '../estados/estados.module';
+import { GestorRegistrarRecepcionBolsin } from './service/gestor-registrar-recepcion-bolsin.service';
+import { NotificadorCU29Service } from './service/notificador-cu29.service';
+import { RecepcionBolsinController } from './controller/recepcion-bolsin.controller';
+import { RecepcionEnCursoRepository } from './repository/recepcion-en-curso.repository';
+import { RECEPCIONES_EN_CURSO } from './repository/recepciones-en-curso.repository.interface';
 @Module({
   imports: [
-    TypeOrmModule.forFeature([
-      BolsinOrmEntity,
-      RemitoOrmEntity,
-      DetalleRemitoOrmEntity,
-      DocumentacionOrmEntity,
-      TipoDocumentacionOrmEntity,
-      CambioEstadoBolsinOrmEntity,
-      CambioEstadoDocumentacionOrmEntity,
-    ]),
-    IdentidadModule,
-    CatalogoModule,
+    BolsinesModule,
+    RemitosModule,
+    DocumentacionesModule,
+    SesionesModule,
+    EstadosModule,
+    UsuariosModule,
+    EmpleadosModule,
+    ComisionesMedicasModule,
   ],
   controllers: [RecepcionBolsinController],
-  providers: [GestorRegistrarRecepcionBolsin, RecepcionEnCursoStore, NotificadorCU29Service],
+  providers: [
+    GestorRegistrarRecepcionBolsin,
+    NotificadorCU29Service,
+    { provide: RECEPCIONES_EN_CURSO, useClass: RecepcionEnCursoRepository },
+  ],
 })
 export class RecepcionBolsinModule {}

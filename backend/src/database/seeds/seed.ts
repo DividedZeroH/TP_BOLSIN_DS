@@ -1,15 +1,15 @@
 import { DataSource, EntityManager } from 'typeorm';
-import { EstadoOrmEntity } from '../../modules/catalogo/persistence/estado.orm-entity';
-import { EmpleadoOrmEntity } from '../../modules/identidad/persistence/empleado.orm-entity';
-import { UsuarioOrmEntity } from '../../modules/identidad/persistence/usuario.orm-entity';
-import { ComisionMedicaOrmEntity } from '../../modules/organizacion/persistence/comision-medica.orm-entity';
-import { BolsinOrmEntity } from '../../modules/recepcion-bolsin/persistence/bolsin.orm-entity';
-import { CambioEstadoBolsinOrmEntity } from '../../modules/recepcion-bolsin/persistence/cambio-estado-bolsin.orm-entity';
-import { CambioEstadoDocumentacionOrmEntity } from '../../modules/recepcion-bolsin/persistence/cambio-estado-documentacion.orm-entity';
-import { DetalleRemitoOrmEntity } from '../../modules/recepcion-bolsin/persistence/detalle-remito.orm-entity';
-import { DocumentacionOrmEntity } from '../../modules/recepcion-bolsin/persistence/documentacion.orm-entity';
-import { RemitoOrmEntity } from '../../modules/recepcion-bolsin/persistence/remito.orm-entity';
-import { TipoDocumentacionOrmEntity } from '../../modules/recepcion-bolsin/persistence/tipo-documentacion.orm-entity';
+import { Estado, AmbitoEstado } from '../../modules/estados/entity/estado.entity';
+import { Empleado } from '../../modules/empleados/entity/empleado.entity';
+import { Usuario } from '../../modules/usuarios/entity/usuario.entity';
+import { ComisionMedica } from '../../modules/comisiones-medicas/entity/comision-medica.entity';
+import { Bolsin } from '../../modules/bolsines/entity/bolsin.entity';
+import { CambioEstadoBolsin } from '../../modules/bolsines/entity/cambio-estado-bolsin.entity';
+import { CambioEstadoDocumentacion } from '../../modules/documentaciones/entity/cambio-estado-documentacion.entity';
+import { DetalleRemito } from '../../modules/remitos/entity/detalle-remito.entity';
+import { Documentacion } from '../../modules/documentaciones/entity/documentacion.entity';
+import { Remito } from '../../modules/remitos/entity/remito.entity';
+import { TipoDocumentacion } from '../../modules/documentaciones/entity/tipo-documentacion.entity';
 
 type TipoSeed = 'expediente' | 'informe';
 
@@ -28,14 +28,22 @@ const CM_ORIGEN = [
 ];
 
 /** Los únicos estados que usa el CU28 (los nombres siguen al README). */
-const ESTADOS = [
+const ESTADOS: Pick<Estado, 'nombre' | 'ambito'>[] = [
   { nombre: 'Enviado', ambito: 'BOLSIN' },
   { nombre: 'Recibido', ambito: 'BOLSIN' },
   { nombre: 'Enviado', ambito: 'REMITO' },
   { nombre: 'RecibidoYAceptado', ambito: 'REMITO' },
   { nombre: 'EnBolsinEnviado', ambito: 'DOCUMENTACION' },
-  { nombre: 'Aceptada', ambito: 'DOCUMENTACION' },
+  { nombre: 'RecibidoYAceptado', ambito: 'DOCUMENTACION' },
 ];
+
+/** Catálogo persistido e idempotente: la lógica de producción lo consulta en la BD. */
+export async function sembrarEstados(manager: EntityManager): Promise<void> {
+  // TypeORM añade los IDs generados a los objetos recibidos. No debe modificar
+  // el catálogo reutilizado por ejecuciones posteriores del seed.
+  const estados = ESTADOS.map(({ nombre, ambito }) => ({ nombre, ambito }));
+  await manager.upsert(Estado, estados, ['nombre', 'ambito']);
+}
 
 const TIPOS: Record<TipoSeed, string> = {
   expediente: 'Expediente médico',
@@ -140,9 +148,9 @@ const ESCENARIO: BolsinSeed[] = [
 async function upsertComision(
   manager: EntityManager,
   nombre: string,
-): Promise<ComisionMedicaOrmEntity> {
-  await manager.upsert(ComisionMedicaOrmEntity, { nombre }, ['nombre']);
-  return manager.findOneByOrFail(ComisionMedicaOrmEntity, { nombre });
+): Promise<ComisionMedica> {
+  await manager.upsert(ComisionMedica, { nombre }, ['nombre']);
+  return manager.findOneByOrFail(ComisionMedica, { nombre });
 }
 
 /**
@@ -153,13 +161,13 @@ async function upsertComision(
  */
 export async function sembrar(manager: EntityManager): Promise<void> {
   const cmDestino = await upsertComision(manager, CM_DESTINO);
-  const cmOrigen: ComisionMedicaOrmEntity[] = [];
+  const cmOrigen: ComisionMedica[] = [];
   for (const nombre of CM_ORIGEN) {
     cmOrigen.push(await upsertComision(manager, nombre));
   }
 
   await manager.upsert(
-    EmpleadoOrmEntity,
+    Empleado,
     {
       apellido: 'Pérez',
       email: 'encargado.cordoba@demo.local',
@@ -167,11 +175,11 @@ export async function sembrar(manager: EntityManager): Promise<void> {
     },
     ['email'],
   );
-  const empleado = await manager.findOneByOrFail(EmpleadoOrmEntity, {
+  const empleado = await manager.findOneByOrFail(Empleado, {
     email: 'encargado.cordoba@demo.local',
   });
-  await manager.upsert(UsuarioOrmEntity, { empleadoId: empleado.id }, ['empleadoId']);
-  const usuario = await manager.findOneByOrFail(UsuarioOrmEntity, { empleadoId: empleado.id });
+  await manager.upsert(Usuario, { empleadoId: empleado.id }, ['empleadoId']);
+  const usuario = await manager.findOneByOrFail(Usuario, { empleadoId: empleado.id });
   // El frontend trabaja siempre con la sesión 1 (no hay autenticación). Va en
   // SQL porque `upsert` de TypeORM descarta el id de una PK autogenerada.
   await manager.query(
@@ -183,21 +191,21 @@ export async function sembrar(manager: EntityManager): Promise<void> {
     `SELECT setval(pg_get_serial_sequence('sesion', 'id'), (SELECT MAX("id") FROM "sesion"))`,
   );
 
-  await manager.upsert(EstadoOrmEntity, ESTADOS, ['nombre', 'ambito']);
-  const estado = (nombre: string, ambito: string) =>
-    manager.findOneByOrFail(EstadoOrmEntity, { nombre, ambito });
+  await sembrarEstados(manager);
+  const estado = (nombre: string, ambito: AmbitoEstado) =>
+    manager.findOneByOrFail(Estado, { nombre, ambito });
   const bolsinEnviado = await estado('Enviado', 'BOLSIN');
   const remitoEnviado = await estado('Enviado', 'REMITO');
   const documentacionEnviada = await estado('EnBolsinEnviado', 'DOCUMENTACION');
 
   await manager.upsert(
-    TipoDocumentacionOrmEntity,
+    TipoDocumentacion,
     Object.values(TIPOS).map((nombre) => ({ nombre })),
     ['nombre'],
   );
-  const tipos = {} as Record<TipoSeed, TipoDocumentacionOrmEntity>;
+  const tipos = {} as Record<TipoSeed, TipoDocumentacion>;
   for (const [clave, nombre] of Object.entries(TIPOS) as [TipoSeed, string][]) {
-    tipos[clave] = await manager.findOneByOrFail(TipoDocumentacionOrmEntity, { nombre });
+    tipos[clave] = await manager.findOneByOrFail(TipoDocumentacion, { nombre });
   }
 
   // Lo que no tiene clave natural se recrea desde cero.
@@ -210,14 +218,14 @@ export async function sembrar(manager: EntityManager): Promise<void> {
     const fecha = new Date(item.fecha);
 
     await manager.upsert(
-      BolsinOrmEntity,
+      Bolsin,
       { numeroPrecinto: item.precinto, cmOrigenId: origen.id, cmDestinoId: cmDestino.id },
       ['numeroPrecinto'],
     );
-    const bolsin = await manager.findOneByOrFail(BolsinOrmEntity, {
+    const bolsin = await manager.findOneByOrFail(Bolsin, {
       numeroPrecinto: item.precinto,
     });
-    await manager.insert(CambioEstadoBolsinOrmEntity, {
+    await manager.insert(CambioEstadoBolsin, {
       bolsinId: bolsin.id,
       estadoId: bolsinEnviado.id,
       responsableId: empleado.id,
@@ -227,7 +235,7 @@ export async function sembrar(manager: EntityManager): Promise<void> {
 
     for (const remitoItem of item.remitos) {
       await manager.upsert(
-        RemitoOrmEntity,
+        Remito,
         {
           numero: remitoItem.numero,
           bolsinId: bolsin.id,
@@ -237,39 +245,32 @@ export async function sembrar(manager: EntityManager): Promise<void> {
         },
         ['numero'],
       );
-      const remito = await manager.findOneByOrFail(RemitoOrmEntity, {
+      const remito = await manager.findOneByOrFail(Remito, {
         numero: remitoItem.numero,
       });
 
       for (const [asunto, tipo] of remitoItem.documentos) {
-        const { identifiers } = await manager.insert(DocumentacionOrmEntity, {
+        const { identifiers } = await manager.insert(Documentacion, {
           asunto,
           tipoDocumentacionId: tipos[tipo].id,
           cmOrigenId: origen.id,
         });
         const documentacionId = identifiers[0].id as number;
-        await manager.insert(CambioEstadoDocumentacionOrmEntity, {
+        await manager.insert(CambioEstadoDocumentacion, {
           documentacionId,
           estadoId: documentacionEnviada.id,
           responsableId: empleado.id,
           fechaHoraInicio: fecha,
           fechaHoraFin: null,
         });
-        await manager.insert(DetalleRemitoOrmEntity, { remitoId: remito.id, documentacionId });
+        await manager.insert(DetalleRemito, { remitoId: remito.id, documentacionId });
       }
     }
   }
 }
 
-/** Solo para tests: deja todas las tablas vacías antes de volver a sembrar. */
-export async function vaciarTablas(dataSource: DataSource): Promise<void> {
-  const tablas = dataSource.entityMetadatas.map((m) => `"${m.tableName}"`).join(', ');
-  await dataSource.query(`TRUNCATE ${tablas} RESTART IDENTITY CASCADE`);
-}
-
 if (require.main === module) {
-  // Import diferido para que importar `sembrar` desde los tests no abra la
-  // conexión de desarrollo.
+  // La conexión se abre únicamente al ejecutar el comando de seed.
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const dataSource: DataSource = require('../data-source').default;
   dataSource

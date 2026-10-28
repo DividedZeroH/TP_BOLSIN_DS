@@ -6,13 +6,12 @@ import type { DataSourceOptions } from 'typeorm';
 // variables ya exportadas (por ejemplo en CI) tienen prioridad.
 config({ path: resolve(__dirname, '../../../.env') });
 
-/** Los tests (`NODE_ENV=test`) usan siempre la base `tpi_bolsin_test`. */
+/** Conexión de la aplicación y de los comandos de migración y seed. */
 export function urlBaseDeDatos(): string {
-  const variable = process.env.NODE_ENV === 'test' ? 'TEST_DATABASE_URL' : 'DATABASE_URL';
-  const url = process.env[variable];
+  const url = process.env.DATABASE_URL;
   if (!url) {
     throw new Error(
-      `Falta ${variable}. Copiá .env.example a .env y levantá Postgres con "npm run db:up".`,
+      'Falta DATABASE_URL. Copiá .env.example a .env y levantá Postgres con "npm run db:up".',
     );
   }
   return url;
@@ -29,7 +28,7 @@ export function opcionesBaseDeDatos(): DataSourceOptions {
   return {
     type: 'postgres',
     url: urlBaseDeDatos(),
-    entities: [glob(__dirname, '../modules/**/persistence/*.orm-entity.{ts,js}')],
+    entities: [glob(__dirname, '../modules/**/entity/*.entity.{ts,js}')],
     migrations: [glob(__dirname, 'migrations/*.{ts,js}')],
     synchronize: false,
   };
