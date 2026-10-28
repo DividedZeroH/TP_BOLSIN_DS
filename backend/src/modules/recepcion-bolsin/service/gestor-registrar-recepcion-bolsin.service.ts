@@ -33,8 +33,8 @@ import {
 } from '../opciones-recepcion';
 import {
   RecepcionEnCurso,
-  RecepcionesEnCurso,
-  RECEPCIONES_EN_CURSO,
+  RecepcionesEnCursoRepositoryInterface,
+  RECEPCIONES_EN_CURSO_REPOSITORY,
 } from '../repository/recepciones-en-curso.repository.interface';
 import { BolsinesService } from '../../bolsines/service/bolsines.service';
 import {
@@ -48,16 +48,19 @@ import {
   UNIDAD_DE_TRABAJO,
 } from '../../../shared/transaction/unidad-de-trabajo.interface';
 
-interface RemitoParaRecepcion {
-  remito: Remito;
-  numero: number;
+/** Estados que deja aplicados una recepción confirmada. */
+interface EstadosRecepcion {
+  bolsin: Estado;
+  remito: Estado;
+  documentacion: Estado;
 }
+
 /**
  * Clase Control/Gestor del CU28. Tiene un método por mensaje del diagrama de
  * secuencia, en el mismo orden. Los cuatro mensajes que llegan desde la
  * pantalla (`nuevaRecepcionBolsin`, `tomarBolsin`, `tomarOpcion`,
  * `tomarConfirmacion`) son pasos con estado: lo tomado entre uno y otro vive
- * en `RecepcionEnCursoRepository`, keyed por `recepcionId`.
+ * en `RecepcionesEnCursoRepository`, keyed por `recepcionId`.
  */
 @Injectable()
 export class GestorRegistrarRecepcionBolsin {
@@ -72,8 +75,8 @@ export class GestorRegistrarRecepcionBolsin {
     private readonly usuariosService: UsuariosService,
     private readonly empleadosService: EmpleadosService,
     private readonly comisionesMedicasService: ComisionesMedicasService,
-    @Inject(RECEPCIONES_EN_CURSO)
-    private readonly recepciones: RecepcionesEnCurso,
+    @Inject(RECEPCIONES_EN_CURSO_REPOSITORY)
+    private readonly recepciones: RecepcionesEnCursoRepositoryInterface,
     private readonly notificador: NotificadorCU29Service,
   ) {}
   // ---------------------------------------------------------------------------
@@ -82,12 +85,7 @@ export class GestorRegistrarRecepcionBolsin {
   async nuevaRecepcionBolsin(sesionId: number): Promise<InicioRecepcionDto> {
     const empleado = await this.buscarUsuarioLogueado(sesionId);
     const comision = this.buscarComisionMedicaUsuario(empleado);
-    const nombreComision = this.comisionesMedicasService.getNombre(comision);
-    const recepcion = this.recepciones.crear({
-      sesionId,
-      comisionMedica: comision,
-      bolsines: [],
-    });
+    const recepcion = this.recepciones.crear({ sesionId, comisionMedica: comision });
     return {
       recepcionId: recepcion.id,
       usuarioLogueado: {
@@ -95,10 +93,7 @@ export class GestorRegistrarRecepcionBolsin {
         apellido: empleado.apellido,
         email: empleado.email,
       },
-      comisionMedica: {
-        id: comision.id,
-        nombre: nombreComision,
-      },
+      comisionMedica: this.aComisionMedicaDto(comision),
     };
   }
 
@@ -106,7 +101,7 @@ export class GestorRegistrarRecepcionBolsin {
   async consultarBolsinesParaSeleccion(
     recepcionId: string,
   ): Promise<BolsinesParaSeleccionDto> {
-    const recepcion = this.recepciones.obtener(recepcionId);
+    const recepcion = this.obtenerRecepcion(recepcionId);
     this.exigirRecepcionSinConfirmar(recepcion);
     if (recepcion.paso !== 'INICIADA') {
       throw new BadRequestException('La selección del bolsín ya está en curso.');
@@ -155,17 +150,16 @@ export class GestorRegistrarRecepcionBolsin {
     return bolsines.map((bolsin) => this.bolsinesService.getNumeroPrecinto(bolsin));
   }
   buscarComisionMedicaBolsin(bolsines: Bolsin[]): ComisionMedicaDto[] {
-    return bolsines.map((bolsin) => {
-      const origen = this.bolsinesService.obtenerCMOrigen(bolsin);
-      return { id: origen.id, nombre: this.comisionesMedicasService.getNombre(origen) };
-    });
+    return bolsines.map((bolsin) =>
+      this.aComisionMedicaDto(this.bolsinesService.obtenerCMOrigen(bolsin)),
+    );
   }
   // ---------------------------------------------------------------------------
   // tomarBolsin()
   // ---------------------------------------------------------------------------
   /** Se puede volver a elegir otro bolsín; eso descarta la opción tomada. */
   tomarBolsin(recepcionId: string, numeroPrecinto: number): BolsinSeleccionadoDto {
-    const recepcion = this.recepciones.obtener(recepcionId);
+    const recepcion = this.obtenerRecepcion(recepcionId);
     this.exigirRecepcionSinConfirmar(recepcion);
     const bolsin = recepcion.bolsines.find(
       (b) => this.bolsinesService.getNumeroPrecinto(b) === numeroPrecinto,
@@ -178,24 +172,28 @@ export class GestorRegistrarRecepcionBolsin {
     recepcion.numeroPrecinto = numeroPrecinto;
     recepcion.opcionCodigo = undefined;
     recepcion.paso = 'BOLSIN_SELECCIONADO';
-    const remitos = this.buscarRemitoBolsin(bolsin);
-    const documentaciones = this.buscarDocumentacionBolsin(bolsin);
+    const numeroDeRemito = new Map(
+      this.buscarRemitoBolsin(bolsin).map((remito) => [
+        remito.id,
+        this.remitosService.getNumero(remito),
+      ]),
+    );
     return {
       bolsin: this.resumir(bolsin),
-      documentacion: documentaciones.map(({ documentacion, remitoId, tipo, asunto }) => ({
-        id: documentacion.id,
-        numeroRemito: this.remitoDe(remitos, remitoId).numero,
-        tipo,
-        asunto,
-      })),
+      documentacion: this.buscarDocumentacionBolsin(bolsin).map(
+        ({ documentacion, remitoId, tipo, asunto }) => ({
+          id: documentacion.id,
+          // Cada documentación proviene de uno de los remitos de este bolsín.
+          numeroRemito: numeroDeRemito.get(remitoId)!,
+          tipo,
+          asunto,
+        }),
+      ),
       opciones: OPCIONES_RECEPCION.map((codigo) => MANEJADORES_OPCION_RECEPCION[codigo]),
     };
   }
-  buscarRemitoBolsin(bolsin: Bolsin): RemitoParaRecepcion[] {
-    return this.bolsinesService.buscarRemitoBolsin(bolsin).map((remito) => ({
-      remito,
-      numero: this.remitosService.getNumero(remito),
-    }));
+  buscarRemitoBolsin(bolsin: Bolsin): Remito[] {
+    return this.bolsinesService.buscarRemitoBolsin(bolsin);
   }
   buscarDocumentacionBolsin(bolsin: Bolsin): DocumentacionEncontrada[] {
     return this.bolsinesService.buscarDocumentacionBolsin(bolsin);
@@ -205,7 +203,7 @@ export class GestorRegistrarRecepcionBolsin {
   // ---------------------------------------------------------------------------
   /** Solo `CONTENIDO_IGUAL` está implementada; las otras tres se rechazan. */
   tomarOpcion(recepcionId: string, codigo: CodigoOpcionRecepcion): PedidoConfirmacionDto {
-    const recepcion = this.recepciones.obtener(recepcionId);
+    const recepcion = this.obtenerRecepcion(recepcionId);
     this.exigirRecepcionSinConfirmar(recepcion);
     this.exigirBolsinSeleccionado(recepcion);
     const opcion: OpcionRecepcion | undefined = MANEJADORES_OPCION_RECEPCION[codigo];
@@ -229,7 +227,7 @@ export class GestorRegistrarRecepcionBolsin {
    * ni los remitos, ni la documentación quedan a medio recibir.
    */
   async tomarConfirmacion(recepcionId: string): Promise<ResultadoRecepcionDto> {
-    const recepcion = this.recepciones.obtener(recepcionId);
+    const recepcion = this.obtenerRecepcion(recepcionId);
     // Reintentar una respuesta perdida no vuelve a escribir ni a llamar al CU29.
     if (recepcion.resultado) return recepcion.resultado;
     const numeroPrecinto = this.exigirBolsinSeleccionado(recepcion);
@@ -237,7 +235,7 @@ export class GestorRegistrarRecepcionBolsin {
       throw new BadRequestException('No hay opción de recepción seleccionada.');
     }
     const empleado = await this.buscarUsuarioLogueado(recepcion.sesionId);
-    const { bolsin, fechaHora } = await this.unidadDeTrabajo.ejecutar(
+    const { bolsin, estados, fechaHora } = await this.unidadDeTrabajo.ejecutar(
       async (contexto) => {
         const bolsin = await this.buscarBolsinParaRecibir(
           contexto,
@@ -253,46 +251,38 @@ export class GestorRegistrarRecepcionBolsin {
           empleado,
           fechaHora,
         );
-        const estados = await this.buscarEstadosRecibidoYAceptado(contexto);
-        await this.actualizarEstadoRemito(contexto, bolsin, estados.remito);
+        const { remito, documentacion } =
+          await this.buscarEstadosRecibidoYAceptado(contexto);
+        await this.actualizarEstadoRemito(contexto, bolsin, remito);
         await this.actualizarDocumentacion(
           contexto,
           bolsin,
-          estados.documentacion,
+          documentacion,
           empleado,
           fechaHora,
         );
-        return { bolsin, fechaHora };
+        const estados: EstadosRecepcion = { bolsin: estadoRecibido, remito, documentacion };
+        return { bolsin, estados, fechaHora };
       },
     );
-    const resultado: ResultadoRecepcionDto = {
-      mensaje: `Se registró la recepción del bolsín con precinto ${this.bolsinesService.getNumeroPrecinto(bolsin)}.`,
-      numeroPrecinto: this.bolsinesService.getNumeroPrecinto(bolsin),
-      estadoBolsin: 'Recibido',
-      estadoRemitos: 'RecibidoYAceptado',
-      estadoDocumentacion: 'RecibidoYAceptado',
-      fechaHora: fechaHora.toISOString(),
-    };
-    recepcion.resultado = resultado;
+    recepcion.resultado = this.armarResultado(bolsin, estados, fechaHora);
     recepcion.paso = 'CONFIRMADA';
     // Después del commit, para no anunciar una recepción que pudo revertirse.
     this.llamarCU29(bolsin);
-    return resultado;
+    return recepcion.resultado;
   }
+  /** Recorre el catálogo preguntando `*sosAmbitoBolsin()` y `*sosRecibido()`. */
   async buscarEstadoRecibidoBolsin(contexto: ContextoTransaccion): Promise<Estado> {
-    const estado = await this.estadoService.buscarPorNombreYAmbito(
-      'Recibido',
-      'BOLSIN',
-      contexto,
+    const estados = await this.estadoService.buscarTodos(contexto);
+    const recibido = estados.find(
+      (estado) =>
+        this.estadoService.sosAmbitoBolsin(estado) &&
+        this.estadoService.sosRecibido(estado),
     );
-    if (
-      !estado ||
-      !this.estadoService.sosAmbitoBolsin(estado) ||
-      !this.estadoService.sosRecibido(estado)
-    ) {
+    if (!recibido) {
       throw new NotFoundException('No está configurado el estado Recibido del bolsín.');
     }
-    return estado;
+    return recibido;
   }
   getFechaHoraActual(): Date {
     return new Date();
@@ -308,37 +298,26 @@ export class GestorRegistrarRecepcionBolsin {
     this.bolsinesService.registrarCambioEstadoBolsin(bolsin, estado, empleado, fechaHora);
     await this.bolsinesService.guardarCambiosEstado(bolsin, contexto);
   }
-  /** Ambos ámbitos usan RecibidoYAceptado, como el diagrama de secuencia. */
-  async buscarEstadosRecibidoYAceptado(contexto: ContextoTransaccion): Promise<{
-    remito: Estado;
-    documentacion: Estado;
-  }> {
-    const remito = await this.estadoService.buscarPorNombreYAmbito(
-      'RecibidoYAceptado',
-      'REMITO',
-      contexto,
-    );
-    if (!remito || !this.estadoService.sosAmbitoRemito(remito)) {
-      throw new NotFoundException(
-        'No está configurado el estado RecibidoYAceptado del remito.',
+  /**
+   * Recorre el catálogo preguntando `*sosAmbitoRemito()`,
+   * `*sosAmbitoDocumentacion()` y `*sosRecibidoYAceptado()`. Ambos ámbitos usan
+   * RecibidoYAceptado, como el diagrama de secuencia.
+   */
+  async buscarEstadosRecibidoYAceptado(
+    contexto: ContextoTransaccion,
+  ): Promise<Pick<EstadosRecepcion, 'remito' | 'documentacion'>> {
+    const estados = await this.estadoService.buscarTodos(contexto);
+    const recibidoYAceptadoDe = (sosAmbito: (estado: Estado) => boolean) =>
+      estados.find(
+        (estado) => sosAmbito(estado) && this.estadoService.sosRecibidoYAceptado(estado),
       );
-    }
-    const documentacion = await this.estadoService.buscarPorNombreYAmbito(
-      'RecibidoYAceptado',
-      'DOCUMENTACION',
-      contexto,
+    const remito = recibidoYAceptadoDe((e) => this.estadoService.sosAmbitoRemito(e));
+    const documentacion = recibidoYAceptadoDe((e) =>
+      this.estadoService.sosAmbitoDocumentacion(e),
     );
-    if (!documentacion || !this.estadoService.sosAmbitoDocumentacion(documentacion)) {
+    if (!remito || !documentacion) {
       throw new NotFoundException(
-        'No está configurado el estado RecibidoYAceptado de la documentación.',
-      );
-    }
-    if (!this.estadoService.sosRecibidoYAceptado(remito)) {
-      throw new NotFoundException('El estado del remito no es RecibidoYAceptado.');
-    }
-    if (!this.estadoService.sosRecibidoYAceptado(documentacion)) {
-      throw new NotFoundException(
-        'El estado de la documentación no es RecibidoYAceptado.',
+        'No está configurado el estado RecibidoYAceptado del remito o de la documentación.',
       );
     }
     return { remito, documentacion };
@@ -349,7 +328,7 @@ export class GestorRegistrarRecepcionBolsin {
     estado: Estado,
   ): Promise<void> {
     this.bolsinesService.actualizarEstadoRemito(bolsin, estado);
-    await this.remitosService.guardarEstados(bolsin.remitos, contexto);
+    await this.remitosService.guardarEstados(this.buscarRemitoBolsin(bolsin), contexto);
   }
   async actualizarDocumentacion(
     contexto: ContextoTransaccion,
@@ -360,10 +339,7 @@ export class GestorRegistrarRecepcionBolsin {
   ): Promise<void> {
     this.bolsinesService.actualizarDocumentacion(bolsin, estado, empleado, fechaHora);
     await this.documentacionesService.guardarCambiosEstado(
-      // Extracción técnica para persistir, sin repetir los mensajes de consulta.
-      bolsin.remitos.flatMap((remito) =>
-        remito.detalles.map((detalle) => detalle.documentacion),
-      ),
+      this.buscarDocumentacionBolsin(bolsin).map(({ documentacion }) => documentacion),
       contexto,
     );
   }
@@ -375,7 +351,7 @@ export class GestorRegistrarRecepcionBolsin {
   }
   /** La pantalla lo solicita después de informarEjecucionExitosa. */
   finDelCU(recepcionId: string): void {
-    const recepcion = this.recepciones.obtener(recepcionId);
+    const recepcion = this.obtenerRecepcion(recepcionId);
     if (recepcion.paso !== 'CONFIRMADA') {
       throw new BadRequestException('La recepción todavía no fue confirmada.');
     }
@@ -385,21 +361,24 @@ export class GestorRegistrarRecepcionBolsin {
   // Soporte técnico de la pantalla (no son mensajes del diagrama)
   // ---------------------------------------------------------------------------
   consultarRecepcion(recepcionId: string): EstadoRecepcionDto {
-    const recepcion = this.recepciones.obtener(recepcionId);
+    const recepcion = this.obtenerRecepcion(recepcionId);
     return {
       recepcionId: recepcion.id,
       paso: recepcion.paso,
-      comisionMedica: {
-        id: recepcion.comisionMedica.id,
-        nombre: this.comisionesMedicasService.getNombre(recepcion.comisionMedica),
-      },
+      comisionMedica: this.aComisionMedicaDto(recepcion.comisionMedica),
       bolsines: recepcion.bolsines.map((bolsin) => this.resumir(bolsin)),
       numeroPrecinto: recepcion.numeroPrecinto,
       opcionCodigo: recepcion.opcionCodigo,
     };
   }
   cancelarRecepcion(recepcionId: string): void {
-    this.recepciones.eliminar(recepcionId);
+    this.recepciones.eliminar(this.obtenerRecepcion(recepcionId).id);
+  }
+  /** El repositorio solo guarda; qué responder si no está lo decide el gestor. */
+  private obtenerRecepcion(recepcionId: string): RecepcionEnCurso {
+    const recepcion = this.recepciones.buscar(recepcionId);
+    if (!recepcion) throw new NotFoundException('La recepción no existe o venció.');
+    return recepcion;
   }
   private exigirBolsinSeleccionado(recepcion: RecepcionEnCurso): number {
     if (recepcion.paso === 'INICIADA' || recepcion.numeroPrecinto === undefined) {
@@ -414,8 +393,7 @@ export class GestorRegistrarRecepcionBolsin {
     }
   }
   /**
-   * Relee el bolsín dentro de la transacción y lo bloquea, para que dos
-   * usuarios no reciban el mismo bolsín a la vez.
+   * Valida para que dos usuarios no accedan al mismo bolsin (cumple con ACID (ISOLATION)).
    */
   private async buscarBolsinParaRecibir(
     contexto: ContextoTransaccion,
@@ -442,27 +420,32 @@ export class GestorRegistrarRecepcionBolsin {
     }
     return bolsin;
   }
+  /** Los nombres de estado salen del catálogo, no de literales repetidos acá. */
+  private armarResultado(
+    bolsin: Bolsin,
+    estados: EstadosRecepcion,
+    fechaHora: Date,
+  ): ResultadoRecepcionDto {
+    const numeroPrecinto = this.bolsinesService.getNumeroPrecinto(bolsin);
+    return {
+      mensaje: `Se registró la recepción del bolsín con precinto ${numeroPrecinto}.`,
+      numeroPrecinto,
+      estadoBolsin: estados.bolsin.nombre,
+      estadoRemitos: estados.remito.nombre,
+      estadoDocumentacion: estados.documentacion.nombre,
+      fechaHora: fechaHora.toISOString(),
+    };
+  }
   private resumir(bolsin: Bolsin): BolsinResumenDto {
-    const origen = this.bolsinesService.obtenerCMOrigen(bolsin);
     return {
       id: bolsin.id,
       numeroPrecinto: this.bolsinesService.getNumeroPrecinto(bolsin),
-      comisionMedicaOrigen: {
-        id: origen.id,
-        nombre: this.comisionesMedicasService.getNombre(origen),
-      },
+      comisionMedicaOrigen: this.aComisionMedicaDto(
+        this.bolsinesService.obtenerCMOrigen(bolsin),
+      ),
     };
   }
-  private remitoDe(
-    remitos: RemitoParaRecepcion[],
-    remitoId: number,
-  ): RemitoParaRecepcion {
-    const remito = remitos.find((r) => r.remito.id === remitoId);
-    if (!remito) {
-      throw new Error(
-        `No se encontró el remito ${remitoId} de la documentación seleccionada.`,
-      );
-    }
-    return remito;
+  private aComisionMedicaDto(comision: ComisionMedica): ComisionMedicaDto {
+    return { id: comision.id, nombre: this.comisionesMedicasService.getNombre(comision) };
   }
 }

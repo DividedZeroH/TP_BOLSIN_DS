@@ -8,22 +8,14 @@ import {
   InicioRecepcion,
   PedidoConfirmacion,
   ResultadoRecepcionBolsin,
-  SesionVista,
 } from './recepcion-bolsin.modelos';
-
-/** No hay autenticación: la pantalla trabaja siempre con la sesión del seed. */
-export const SESION_ID = 1;
+import { API_URL, SESION_ID } from '../api';
 
 @Injectable({ providedIn: 'root' })
 export class RecepcionBolsinService {
-  private readonly api = 'http://localhost:3000/api';
-  private readonly recepciones = `${this.api}/recepciones-bolsines`;
+  private readonly recepciones = `${API_URL}/recepciones-bolsines`;
 
   constructor(private readonly http: HttpClient) {}
-
-  comisionDeSesion(sesionId = SESION_ID): Observable<SesionVista> {
-    return this.http.get<SesionVista>(`${this.api}/sesiones/${sesionId}/comision-medica`);
-  }
 
   nuevaRecepcionBolsin(sesionId = SESION_ID): Observable<InicioRecepcion> {
     return this.http.post<InicioRecepcion>(this.recepciones, { sesionId });

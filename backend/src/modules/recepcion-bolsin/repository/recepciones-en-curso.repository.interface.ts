@@ -30,11 +30,10 @@ export interface RecepcionEnCurso {
   creadaEn: Date;
 }
 
-export const RECEPCIONES_EN_CURSO = Symbol('RECEPCIONES_EN_CURSO');
-export interface RecepcionesEnCurso {
-  crear(
-    datos: Pick<RecepcionEnCurso, 'sesionId' | 'comisionMedica' | 'bolsines'>,
-  ): RecepcionEnCurso;
-  obtener(id: string): RecepcionEnCurso;
+export const RECEPCIONES_EN_CURSO_REPOSITORY = Symbol('RECEPCIONES_EN_CURSO_REPOSITORY');
+export interface RecepcionesEnCursoRepositoryInterface {
+  crear(datos: Pick<RecepcionEnCurso, 'sesionId' | 'comisionMedica'>): RecepcionEnCurso;
+  /** `undefined` si no existe o venció; qué responder lo decide el servicio. */
+  buscar(id: string): RecepcionEnCurso | undefined;
   eliminar(id: string): void;
 }

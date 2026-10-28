@@ -5,7 +5,6 @@ import { Documentacion } from '../../documentaciones/entity/documentacion.entity
 import { DocumentacionesService } from '../../documentaciones/service/documentaciones.service';
 import { Estado } from '../../estados/entity/estado.entity';
 import { Empleado } from '../../empleados/entity/empleado.entity';
-import { ComisionMedica } from '../../comisiones-medicas/entity/comision-medica.entity';
 import { ContextoTransaccion } from '../../../shared/transaction/unidad-de-trabajo.interface';
 import {
   REMITOS_REPOSITORY,
@@ -31,15 +30,6 @@ export class RemitosService {
   }
   getNumero(remito: Remito): number {
     return remito.numero;
-  }
-  getEstado(remito: Remito): Estado {
-    return remito.estado;
-  }
-  getCMOrigen(remito: Remito): ComisionMedica {
-    return remito.cmOrigen;
-  }
-  getCMDestino(remito: Remito): ComisionMedica {
-    return remito.cmDestino;
   }
   setEstado(remito: Remito, estado: Estado): void {
     remito.estado = estado;

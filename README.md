@@ -551,8 +551,8 @@ notificaciones.
 Un reintento de la misma recepción ya confirmada devuelve su resultado guardado,
 sin volver a persistir ni invocar CU29.
 
-`RecepcionesEnCurso`, inyectado mediante `RECEPCIONES_EN_CURSO`, conserva
-su implementación en memoria (`RecepcionEnCursoRepository`), el Map, el TTL de
+`RecepcionesEnCursoRepositoryInterface`, inyectado mediante `RECEPCIONES_EN_CURSO_REPOSITORY`, conserva
+su implementación en memoria (`RecepcionesEnCursoRepository`), el Map, el TTL de
 30 minutos y el barrido. La respuesta inicial devuelve usuario y comisión;
 el listado se solicita después de mostrar la comisión. El cierre tiene una
 petición propia para ocurrir después de informar el éxito.

@@ -1,6 +1,6 @@
-export type AmbitoEstado = 'BOLSIN' | 'REMITO' | 'DOCUMENTACION';
-
 import { Column, Entity, PrimaryGeneratedColumn, Unique } from 'typeorm';
+
+export type AmbitoEstado = 'BOLSIN' | 'REMITO' | 'DOCUMENTACION';
 
 @Entity('estado')
 @Unique('uq_estado_nombre_ambito', ['nombre', 'ambito'])
