@@ -414,8 +414,7 @@ export class GestorRegistrarRecepcionBolsin {
     }
   }
   /**
-   * Relee el bolsín dentro de la transacción y lo bloquea, para que dos
-   * usuarios no reciban el mismo bolsín a la vez.
+   * Valida para que dos usuarios no accedan al mismo bolsin (cumple con ACID (ISOLATION)).
    */
   private async buscarBolsinParaRecibir(
     contexto: ContextoTransaccion,
